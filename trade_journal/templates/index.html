@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trade Journal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+<!-- Animated background orbs -->
+<div class="bg-orbs">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="orb orb-4"></div>
+</div>
+
+<div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-brand">
+                <div class="sidebar-logo">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 5-9"/></svg>
+                </div>
+                <div>
+                    <h1>Trade Journal</h1>
+                    <p>Performance Tracker</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="nav-section">
+            <div class="nav-section-title">Menu</div>
+            <div class="nav-item active" onclick="showView('dashboard')" id="nav-dashboard">
+                <div class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+                Dashboard
+            </div>
+            <div class="nav-item" onclick="showView('import')" id="nav-import">
+                <div class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+                Import Trades
+            </div>
+            <div class="nav-item" onclick="showView('add-trade')" id="nav-add-trade">
+                <div class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
+                Add Trade
+            </div>
+            <div class="nav-item" onclick="showView('settings')" id="nav-settings">
+                <div class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div>
+                Settings
+            </div>
+        </div>
+
+        <div class="nav-section">
+            <div class="nav-section-title">History</div>
+        </div>
+        <div class="trading-days-list" id="trading-days-list">
+            <p style="padding:12px;font-size:12px;color:var(--text-muted)">No trading days yet.</p>
+        </div>
+
+        <!-- AMP Connection Status -->
+        <div class="sidebar-footer" id="amp-status">
+            <div class="amp-badge disconnected">
+                <div class="amp-dot"></div>
+                <span>AMP Disconnected</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main-content">
+
+        <!-- ============ DASHBOARD ============ -->
+        <div id="view-dashboard" class="view-animate">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:28px">
+                <div class="page-header" style="margin-bottom:0">
+                    <div class="page-icon gradient-1">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 5-9"/></svg>
+                    </div>
+                    <div>
+                        <h2>Dashboard</h2>
+                        <div class="subtitle">Performance overview</div>
+                    </div>
+                </div>
+                <!-- Timeframe selector -->
+                <div class="timeframe-selector" id="timeframe-selector">
+                    <button class="tf-btn" data-tf="week">This Week</button>
+                    <button class="tf-btn" data-tf="month">This Month</button>
+                    <button class="tf-btn" data-tf="quarter">Quarter</button>
+                    <button class="tf-btn" data-tf="year">YTD</button>
+                    <button class="tf-btn active" data-tf="all">All Time</button>
+                </div>
+            </div>
+
+            <div class="stats-grid" id="dashboard-stats">
+                <div class="stat-card accent-green animate-in" style="--delay:0">
+                    <div class="stat-top"><div class="stat-label">Total P&L</div><div class="stat-badge sb-green"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5"><path d="M12 2v20M17 7l-5-5-5 5"/></svg></div></div>
+                    <div class="stat-value" id="ds-total-pnl">$0.00</div>
+                </div>
+                <div class="stat-card accent-purple animate-in" style="--delay:1">
+                    <div class="stat-top"><div class="stat-label">Trading Days</div><div class="stat-badge sb-purple"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div></div>
+                    <div class="stat-value" id="ds-total-days">0</div>
+                    <div class="stat-sub" id="ds-total-trades-sub"></div>
+                </div>
+                <div class="stat-card animate-in" style="--delay:2">
+                    <div class="stat-top"><div class="stat-label">Avg Daily P&L</div><div class="stat-badge sb-blue"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 12h2v6H7zM11 8h2v10h-2zM15 10h2v8h-2z"/></svg></div></div>
+                    <div class="stat-value" id="ds-avg-pnl">$0.00</div>
+                </div>
+                <div class="stat-card animate-in" style="--delay:3">
+                    <div class="stat-top"><div class="stat-label">Win / Loss Days</div><div class="stat-badge sb-cyan"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div></div>
+                    <div class="stat-value" id="ds-win-loss" style="font-size:20px">0 / 0</div>
+                </div>
+                <div class="stat-card accent-green animate-in" style="--delay:4">
+                    <div class="stat-top"><div class="stat-label">Best Day</div><div class="stat-badge sb-green"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5"><path d="M12 2l3 6.5L22 9.5l-5 5 1.2 7L12 18l-6.2 3.5L7 14.5l-5-5 7-.9z"/></svg></div></div>
+                    <div class="stat-value positive" id="ds-best-day">$0.00</div>
+                    <div class="stat-sub" id="ds-best-date">-</div>
+                </div>
+                <div class="stat-card accent-red animate-in" style="--delay:5">
+                    <div class="stat-top"><div class="stat-label">Worst Day</div><div class="stat-badge sb-red"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2"><path d="M12 2v20M7 17l5 5 5-5"/></svg></div></div>
+                    <div class="stat-value negative" id="ds-worst-day">$0.00</div>
+                    <div class="stat-sub" id="ds-worst-date">-</div>
+                </div>
+                <div class="stat-card animate-in" style="--delay:6">
+                    <div class="stat-top"><div class="stat-label">Current Streak</div><div class="stat-badge sb-orange"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div></div>
+                    <div class="stat-value" id="ds-streak">0</div>
+                </div>
+                <div class="stat-card accent-purple animate-in" style="--delay:7">
+                    <div class="stat-top"><div class="stat-label">Day Win Rate</div><div class="stat-badge sb-purple"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20" fill="rgba(191,90,242,0.15)"/></svg></div></div>
+                    <div class="stat-value" id="ds-day-wr">0%</div>
+                </div>
+                <div class="stat-card animate-in" style="--delay:8">
+                    <div class="stat-top"><div class="stat-label">Avg R-Multiple</div><div class="stat-badge sb-yellow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--yellow)" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg></div></div>
+                    <div class="stat-value" id="ds-avg-r">0R</div>
+                </div>
+            </div>
+
+            <div class="card animate-in" style="--delay:2">
+                <div class="card-header"><h3><span class="card-icon ci-purple"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 5-9"/></svg></span> Equity Curve</h3></div>
+                <div class="equity-chart" id="equity-chart"></div>
+            </div>
+
+            <div class="card animate-in" style="--delay:3">
+                <div class="card-header"><h3><span class="card-icon ci-blue"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span> P&L Calendar</h3></div>
+                <div id="pnl-calendar"></div>
+            </div>
+        </div>
+
+        <!-- ============ DAY VIEW ============ -->
+        <div id="view-day" style="display:none" class="view-animate">
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;flex-wrap:wrap">
+                <button class="btn btn-sm" onclick="navigateDay(-1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg> Prev</button>
+                <div class="page-header" style="margin-bottom:0">
+                    <div class="page-icon gradient-2"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><path d="M8 14l2 2 4-4"/></svg></div>
+                    <div>
+                        <h2 id="day-title">-</h2>
+                        <div class="subtitle">Session breakdown & analysis</div>
+                    </div>
+                </div>
+                <button class="btn btn-sm" onclick="navigateDay(1)">Next <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></button>
+            </div>
+
+            <div class="stats-grid" id="day-stats"></div>
+
+            <!-- Chart with interval selector -->
+            <div class="card">
+                <div class="card-header">
+                    <h3><span class="card-icon ci-purple"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="8" rx="0.5"/><rect x="14" y="6" width="3" height="12" rx="0.5"/></svg></span> <span id="chart-symbol">ES Futures</span></h3>
+                    <div class="chart-intervals">
+                        <button class="ci-btn" data-interval="1m">1m</button>
+                        <button class="ci-btn active" data-interval="5m">5m</button>
+                        <button class="ci-btn" data-interval="15m">15m</button>
+                        <button class="ci-btn" data-interval="30m">30m</button>
+                        <button class="ci-btn" data-interval="1h">1h</button>
+                    </div>
+                </div>
+                <div class="chart-container" id="trade-chart"></div>
+            </div>
+
+            <!-- Trades Table with inline notes -->
+            <div class="card">
+                <div class="card-header">
+                    <h3><span class="card-icon ci-green"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span> Trade Log</h3>
+                    <span style="font-size:10px;color:var(--text-muted)" id="trade-count">0 trades</span>
+                </div>
+                <div style="overflow-x:auto">
+                    <table class="trades-table">
+                        <thead><tr>
+                            <th>#</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Entry</th><th>Exit</th><th>Stop</th>
+                            <th>Entry Time</th><th>Exit Time</th><th>Hold Time</th><th>P&L</th><th>R</th><th>Fees</th><th>Net</th><th></th>
+                        </tr></thead>
+                        <tbody id="trades-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- AI Analysis -->
+            <div class="card">
+                <div class="card-header">
+                    <h3><span class="card-icon ci-purple"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><path d="M12 2a4 4 0 014 4c0 1.95-2 3-2 8h-4c0-5-2-6.05-2-8a4 4 0 014-4z"/><line x1="10" y1="18" x2="14" y2="18"/><line x1="10" y1="21" x2="14" y2="21"/></svg></span> AI Coach Analysis</h3>
+                    <button class="btn btn-primary btn-sm" onclick="analyzeDay()" id="analyze-btn">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2a4 4 0 014 4c0 1.95-2 3-2 8h-4c0-5-2-6.05-2-8a4 4 0 014-4z"/></svg>
+                        Analyze
+                    </button>
+                </div>
+                <div id="ai-analysis" style="font-size:13px;line-height:1.8;color:var(--text-secondary)">
+                    <p>Click "Analyze" to get AI-powered feedback on your trading session. The AI learns your patterns over time.</p>
+                </div>
+            </div>
+
+            <!-- Journal -->
+            <div class="card">
+                <div class="card-header">
+                    <h3><span class="card-icon ci-purple"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg></span> Journal Entry</h3>
+                    <button class="btn btn-primary btn-sm" onclick="saveJournal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg> Save</button>
+                </div>
+                <div class="journal-form">
+                    <div class="form-group"><label>Pre-Market Plan</label><textarea id="j-premarket" placeholder="Key levels, setups, bias..."></textarea></div>
+                    <div class="form-group"><label>Post-Market Review</label><textarea id="j-postmarket" placeholder="How did the session go?"></textarea></div>
+                    <div class="form-group">
+                        <label>Mental State</label>
+                        <div class="emotion-tags" id="emotion-tags">
+                            <span class="emotion-tag" data-emotion="confident">Confident</span>
+                            <span class="emotion-tag" data-emotion="focused">Focused</span>
+                            <span class="emotion-tag" data-emotion="patient">Patient</span>
+                            <span class="emotion-tag" data-emotion="disciplined">Disciplined</span>
+                            <span class="emotion-tag" data-emotion="calm">Calm</span>
+                            <span class="emotion-tag" data-emotion="anxious">Anxious</span>
+                            <span class="emotion-tag" data-emotion="impulsive">Impulsive</span>
+                            <span class="emotion-tag" data-emotion="frustrated">Frustrated</span>
+                            <span class="emotion-tag" data-emotion="fearful">Fearful</span>
+                            <span class="emotion-tag" data-emotion="greedy">Greedy</span>
+                            <span class="emotion-tag" data-emotion="revenge">Revenge Trading</span>
+                            <span class="emotion-tag" data-emotion="fomo">FOMO</span>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Session Rating</label>
+                            <div class="rating" id="rating">
+                                <svg class="rating-star" data-value="1" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                                <svg class="rating-star" data-value="2" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                                <svg class="rating-star" data-value="3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                                <svg class="rating-star" data-value="4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                                <svg class="rating-star" data-value="5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group"><label>Lessons Learned</label><textarea id="j-lessons" placeholder="Key takeaways..."></textarea></div>
+                    <div class="form-group"><label>Mistakes</label><textarea id="j-mistakes" placeholder="What would you do differently?"></textarea></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ IMPORT ============ -->
+        <div id="view-import" style="display:none" class="view-animate">
+            <div class="page-header"><div class="page-icon gradient-3"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div><div><h2>Import Trades</h2><div class="subtitle">Upload from AMP, Rithmic, or NinjaTrader</div></div></div>
+
+            <!-- How to export instructions -->
+            <div class="card" style="border-left:3px solid var(--cyan);margin-bottom:0">
+                <div class="card-header"><h3><span class="card-icon ci-blue"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span> How to Export from AMP</h3></div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px">
+                    <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:var(--purple-dim);color:var(--purple);font-size:12px;font-weight:600">1. Log into AMP Futures portal</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                    <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:var(--purple-dim);color:var(--purple);font-size:12px;font-weight:600">2. Reports</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                    <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:var(--purple-dim);color:var(--purple);font-size:12px;font-weight:600">3. Trade History</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                    <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:var(--green-dim);color:var(--green);font-size:12px;font-weight:600">4. Export CSV</span>
+                </div>
+                <p style="font-size:11px;color:var(--text-muted);margin-top:10px">Also supports Rithmic R|Trader exports: File &rarr; Export &rarr; Trade History. Both comma and semicolon delimiters are handled automatically.</p>
+            </div>
+
+            <!-- Drop zone -->
+            <div class="card">
+                <div class="upload-area" id="upload-area" onclick="document.getElementById('csv-file').click()">
+                    <div class="upload-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="url(#upload-grad)" stroke-width="1.5"><defs><linearGradient id="upload-grad" x1="0" y1="0" x2="24" y2="24"><stop offset="0%" stop-color="var(--purple)"/><stop offset="100%" stop-color="var(--cyan)"/></linearGradient></defs><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+                    <p style="font-size:15px;font-weight:600;color:var(--text-primary);margin-top:12px">Drop your CSV here or click to browse</p>
+                    <p style="color:var(--text-muted);font-size:12px;margin-top:6px">Supports AMP, Rithmic (R|Trader), NinjaTrader CSV exports</p>
+                    <input type="file" id="csv-file" accept=".csv" style="display:none" onchange="previewCSV(this)">
+                </div>
+                <div id="import-status" style="margin-top:16px;display:none"></div>
+            </div>
+
+            <!-- Preview table (hidden until file is loaded) -->
+            <div class="card" id="import-preview-card" style="display:none">
+                <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+                    <h3><span class="card-icon ci-purple"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span> Preview <span id="preview-count" style="color:var(--text-muted);font-weight:400"></span></h3>
+                    <div style="display:flex;gap:8px">
+                        <button class="btn" onclick="cancelImport()" style="font-size:12px;padding:8px 16px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);color:var(--text-secondary)">Cancel</button>
+                        <button class="btn btn-primary" id="confirm-import-btn" onclick="confirmImport()" style="font-size:12px;padding:8px 20px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Confirm Import</button>
+                    </div>
+                </div>
+                <div style="overflow-x:auto;margin-top:12px">
+                    <table style="width:100%;border-collapse:collapse;font-size:12px" id="preview-table">
+                        <thead>
+                            <tr style="border-bottom:1px solid var(--glass-border)">
+                                <th style="padding:10px 12px;text-align:left;color:var(--text-muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.5px">Date</th>
+                                <th style="padding:10px 12px;text-align:left;color:var(--text-muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.5px">Symbol</th>
+                                <th style="padding:10px 12px;text-align:left;color:var(--text-muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.5px">Side</th>
+                                <th style="padding:10px 12px;text-align:right;color:var(--text-muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.5px">Entry</th>
+                                <th style="padding:10px 12px;text-align:right;color:var(--text-muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.5px">Exit</th>
+                                <th style="padding:10px 12px;text-align:center;color:var(--text-muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.5px">Qty</th>
+                                <th style="padding:10px 12px;text-align:right;color:var(--text-muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.5px">P&amp;L</th>
+                                <th style="padding:10px 12px;text-align:right;color:var(--text-muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.5px">Fees</th>
+                            </tr>
+                        </thead>
+                        <tbody id="preview-tbody"></tbody>
+                    </table>
+                </div>
+                <div id="preview-summary" style="margin-top:14px;padding:12px 16px;border-radius:10px;background:rgba(191,90,242,0.04);border:1px solid rgba(191,90,242,0.1);display:flex;gap:24px;flex-wrap:wrap;font-size:12px"></div>
+            </div>
+
+            <!-- Format guide -->
+            <div class="card"><div class="card-header"><h3><span class="card-icon ci-blue"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span> Format Guide</h3></div>
+                <p style="font-size:12px;color:var(--text-secondary);line-height:2"><strong style="color:var(--purple)">Required:</strong> Symbol, Side (Buy/Sell), Price<br><strong style="color:var(--cyan)">Recommended:</strong> Quantity, Date/Time, Commission</p>
+                <p style="font-size:11px;color:var(--text-muted);margin-top:6px">Recognized column names: Symbol/Instrument/Contract, Side/B&sol;S/Buy&sol;Sell, Qty/Quantity/Size, Price/Fill Price/Avg Price, Date/Trade Date/DateTime, Commission/Fee</p>
+                <pre style="font-size:11px;color:var(--cyan);padding:14px;background:rgba(5,5,14,0.6);border-radius:8px;border:1px solid var(--glass-border);overflow-x:auto;margin-top:12px">Symbol,Side,Qty,Price,Date/Time,Commission
+ESH6,BUY,2,5920.50,2026-03-28 09:35:00,4.50
+ESH6,SELL,2,5925.75,2026-03-28 09:52:00,4.50</pre>
+            </div>
+
+            <div id="import-result" style="display:none"></div>
+        </div>
+
+        <!-- ============ ADD TRADE ============ -->
+        <div id="view-add-trade" style="display:none" class="view-animate">
+            <div class="page-header"><div class="page-icon gradient-4"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div><div><h2>Add Trade</h2><div class="subtitle">Manually log a trade</div></div></div>
+            <div class="card" style="max-width:620px">
+                <div class="journal-form">
+                    <div class="form-row">
+                        <div class="form-group"><label>Symbol</label><input type="text" id="at-symbol" value="ES" placeholder="ES, NQ..."></div>
+                        <div class="form-group"><label>Side</label><select id="at-side"><option value="BUY">Long</option><option value="SELL">Short</option></select></div>
+                        <div class="form-group"><label>Quantity</label><input type="number" id="at-qty" value="1" min="1"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Entry Price</label><input type="number" id="at-entry" step="0.01" placeholder="5920.50"></div>
+                        <div class="form-group"><label>Exit Price</label><input type="number" id="at-exit" step="0.01" placeholder="5925.75"></div>
+                        <div class="form-group"><label>Stop Loss</label><input type="number" id="at-stop" step="0.01" placeholder="5915.00"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Entry Time</label><input type="datetime-local" id="at-entry-time"></div>
+                        <div class="form-group"><label>Exit Time</label><input type="datetime-local" id="at-exit-time"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Fees</label><input type="number" id="at-fees" step="0.01" value="0"></div>
+                    </div>
+                    <div class="form-group"><label>Notes</label><textarea id="at-notes" placeholder="Setup, reasoning, observations..."></textarea></div>
+                    <button class="btn btn-primary" onclick="addTrade()" style="font-size:13px;padding:12px 24px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> Add Trade</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ SETTINGS ============ -->
+        <div id="view-settings" style="display:none" class="view-animate">
+            <div class="page-header"><div class="page-icon gradient-1"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div><div><h2>Settings</h2><div class="subtitle">AMP/Rithmic connection & AI configuration</div></div></div>
+
+            <div class="card" style="max-width:620px">
+                <div class="card-header"><h3><span class="card-icon ci-purple"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></span> AMP / Rithmic Connection</h3></div>
+                <div class="journal-form">
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Connect your AMP Futures account via Rithmic to auto-import trades. Use the same login credentials you use for R|Trader Pro.</p>
+                    <div class="form-row"><div class="form-group"><label>Rithmic Username</label><input type="text" id="s-rithmic-user" placeholder="your_rithmic_username"></div><div class="form-group"><label>Password</label><input type="password" id="s-rithmic-pass" placeholder="********"></div></div>
+                    <div class="form-row"><div class="form-group"><label>System Name</label><select id="s-rithmic-system"><option selected>Rithmic Paper Trading</option><option>Rithmic 01</option><option>Rithmic Test</option><option>TopstepTrader</option></select></div><div class="form-group"><label>Gateway</label><select id="s-rithmic-gw"><option>CHICAGO</option><option>AURORA</option><option>EUROPE</option><option>ASIA</option></select></div></div>
+                    <div class="form-group"><label>Account ID (optional — auto-detected if blank)</label><input type="text" id="s-rithmic-acct" placeholder="e.g. APEX-12345"></div>
+                    <div style="display:flex;gap:8px">
+                        <button class="btn btn-primary" onclick="saveRithmicSettings()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg> Save</button>
+                        <button class="btn" onclick="testRithmic()">Test Connection</button>
+                        <button class="btn" onclick="syncRithmic()">Sync Today's Trades</button>
+                    </div>
+                    <div id="rithmic-result" style="margin-top:8px;font-size:12px"></div>
+                </div>
+            </div>
+
+            <div class="card" style="max-width:620px;margin-top:16px">
+                <div class="card-header"><h3><span class="card-icon ci-purple"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><path d="M12 2a4 4 0 014 4c0 1.95-2 3-2 8h-4c0-5-2-6.05-2-8a4 4 0 014-4z"/><line x1="10" y1="18" x2="14" y2="18"/><line x1="10" y1="21" x2="14" y2="21"/></svg></span> AI Analysis (Optional)</h3></div>
+                <div class="journal-form">
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Add an API key for detailed AI trade analysis. Without a key, basic rule-based analysis is still available.</p>
+                    <div class="form-group"><label>Anthropic API Key (Claude)</label><input type="password" id="s-anthropic-key" placeholder="sk-ant-..."></div>
+                    <div class="form-group"><label>OpenAI API Key (GPT)</label><input type="password" id="s-openai-key" placeholder="sk-..."></div>
+                    <button class="btn btn-primary" onclick="saveAISettings()">Save AI Settings</button>
+                    <div id="ai-settings-result" style="margin-top:8px;font-size:12px"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Notes Modal -->
+<div class="modal-overlay" id="notes-modal">
+    <div class="modal">
+        <h3 style="font-size:14px;margin-bottom:12px;display:flex;align-items:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg> Trade Notes</h3>
+        <textarea id="modal-notes" style="width:100%;min-height:120px" placeholder="What was the setup? Why this entry? What happened?"></textarea>
+        <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+            <button class="btn btn-sm" onclick="closeNotesModal()">Cancel</button>
+            <button class="btn btn-primary btn-sm" onclick="saveTradeNotes()">Save Notes</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentDate = null, tradingDays = [], selectedEmotions = [], selectedRating = 0;
+let chart = null, equityChart = null, currentTimeframe = 'all', currentInterval = '5m', editingTradeId = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadTradingDays(); loadDashboard(); setupEmotionTags(); setupRating(); setupDragDrop();
+    setupTimeframeSelector(); setupIntervalSelector(); loadAmpStatus(); loadRithmicSettings();
+});
+
+// ─── Timeframe Selector
+function setupTimeframeSelector() {
+    document.querySelectorAll('.tf-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentTimeframe = btn.dataset.tf;
+            loadDashboard();
+        });
+    });
+}
+
+// ─── Chart Interval Selector
+function setupIntervalSelector() {
+    document.querySelectorAll('.ci-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.ci-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentInterval = btn.dataset.interval;
+            if (currentDate) loadChart(currentDate);
+        });
+    });
+}
+
+function showView(view) {
+    document.querySelectorAll('[id^="view-"]').forEach(v => { v.style.display = 'none'; v.classList.remove('entering'); });
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const el = document.getElementById('view-' + (view === 'day' ? 'day' : view));
+    if (el) { el.style.display = 'block'; requestAnimationFrame(() => el.classList.add('entering')); }
+    const nav = document.getElementById('nav-' + view);
+    if (nav) nav.classList.add('active');
+    if (view === 'dashboard') loadDashboard();
+}
+
+function selectDay(dateStr) { currentDate = dateStr; showView('day'); document.querySelectorAll('.day-item').forEach(d => d.classList.toggle('active', d.dataset.date === dateStr)); loadDay(dateStr); }
+function navigateDay(offset) { if (!currentDate||!tradingDays.length) return; const idx = tradingDays.indexOf(currentDate), ni = idx+offset; if (ni>=0&&ni<tradingDays.length) selectDay(tradingDays[ni]); }
+
+async function loadTradingDays() { tradingDays = await (await fetch('/api/trading-days')).json(); renderTradingDays(); }
+
+function renderTradingDays() {
+    const list = document.getElementById('trading-days-list');
+    if (!tradingDays.length) { list.innerHTML = '<p style="padding:12px;font-size:12px;color:var(--text-muted)">No trading days yet.</p>'; return; }
+    list.innerHTML = tradingDays.map(d => {
+        const dl = new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+        return `<div class="day-item ${d===currentDate?'active':''}" data-date="${d}" onclick="selectDay('${d}')"><span>${dl}</span><span class="pnl" id="sidebar-pnl-${d}">...</span></div>`;
+    }).join('');
+    loadSidebarPnl();
+}
+
+async function loadSidebarPnl() {
+    const data = await (await fetch('/api/calendar')).json();
+    const m = {}; data.forEach(d => m[d.date] = d.net_pnl);
+    tradingDays.forEach(d => { const el = document.getElementById(`sidebar-pnl-${d}`); if (el && m[d]!==undefined) { el.textContent = formatPnl(m[d]); el.className = `pnl ${m[d]>=0?'positive':'negative'}`; }});
+}
+
+async function loadDashboard() {
+    const data = await (await fetch(`/api/dashboard?timeframe=${currentTimeframe}`)).json();
+    const s = data.summary;
+    setPnl('ds-total-pnl', s.total_pnl); setPnl('ds-avg-pnl', s.avg_daily_pnl);
+    document.getElementById('ds-total-days').textContent = s.total_days;
+    document.getElementById('ds-total-trades-sub').textContent = `${s.total_trades||0} total trades`;
+    document.getElementById('ds-win-loss').textContent = `${s.winning_days} / ${s.losing_days}`;
+    document.getElementById('ds-best-day').textContent = s.best_day ? formatPnl(s.best_day.net_pnl) : '$0.00';
+    document.getElementById('ds-best-date').textContent = s.best_day?.date||'-';
+    document.getElementById('ds-worst-day').textContent = s.worst_day ? formatPnl(s.worst_day.net_pnl) : '$0.00';
+    document.getElementById('ds-worst-date').textContent = s.worst_day?.date||'-';
+    const streak = s.current_streak, se = document.getElementById('ds-streak');
+    se.textContent = `${Math.abs(streak)} ${streak>=0?'W':'L'}`; se.className = `stat-value ${streak>=0?'positive':'negative'}`;
+    document.getElementById('ds-day-wr').textContent = `${s.total_days>0?(s.winning_days/s.total_days*100).toFixed(0):0}%`;
+    document.getElementById('ds-avg-r').textContent = `${s.avg_r_multiple>=0?'+':''}${s.avg_r_multiple}R`;
+    document.getElementById('ds-avg-r').className = `stat-value ${s.avg_r_multiple>=0?'positive':'negative'}`;
+    renderEquityCurve(data.daily); renderCalendar();
+}
+
+function setPnl(id, val) { const el = document.getElementById(id); el.textContent = formatPnl(val); el.className = `stat-value ${val>=0?'positive':'negative'}`; }
+
+function renderEquityCurve(dailyData) {
+    const c = document.getElementById('equity-chart'); c.innerHTML = '';
+    if (!dailyData.length) { c.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:12px">Import trades to see your equity curve</div>'; return; }
+    equityChart = LightweightCharts.createChart(c, { width:c.clientWidth,height:220,layout:{background:{color:'#05050e'},textColor:'#3d3660',fontFamily:'Inter'},grid:{vertLines:{color:'rgba(255,255,255,0.02)'},horzLines:{color:'rgba(255,255,255,0.02)'}},rightPriceScale:{borderColor:'rgba(255,255,255,0.04)'},timeScale:{borderColor:'rgba(255,255,255,0.04)',timeVisible:false},crosshair:{mode:0}});
+    const p = dailyData[dailyData.length-1]?.cumulative_pnl>=0;
+    const s = equityChart.addAreaSeries({lineColor:p?'#00ffaa':'#ff2a6d',topColor:p?'rgba(0,255,170,0.15)':'rgba(255,42,109,0.15)',bottomColor:'rgba(5,5,14,0)',lineWidth:2});
+    s.setData(dailyData.map(d=>({time:d.date,value:d.cumulative_pnl}))); equityChart.timeScale().fitContent();
+    new ResizeObserver(()=>equityChart.applyOptions({width:c.clientWidth})).observe(c);
+}
+
+async function renderCalendar() {
+    const data = await (await fetch('/api/calendar')).json();
+    const c = document.getElementById('pnl-calendar');
+    if (!data.length) { c.innerHTML = '<p style="font-size:12px;color:var(--text-muted);padding:8px">No data yet.</p>'; return; }
+    const m = {}; data.forEach(d=>m[d.date]=d);
+    const end = new Date(), start = new Date(); start.setMonth(start.getMonth()-3); start.setDate(1);
+    let h = '<div class="calendar-grid" style="margin-bottom:6px">'; ['S','M','T','W','T','F','S'].forEach(d=>{h+=`<div style="text-align:center;font-size:9px;color:var(--text-muted);font-weight:700">${d}</div>`}); h+='</div>';
+    const cur = new Date(start);
+    while(cur<=end) { const y=cur.getFullYear(),mo=cur.getMonth(); h+=`<div style="font-size:11px;color:var(--text-secondary);margin:14px 0 6px;font-weight:700">${cur.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</div><div class="calendar-grid">`;
+        for(let i=0;i<new Date(y,mo,1).getDay();i++) h+='<div class="calendar-day"></div>';
+        for(let d=1;d<=new Date(y,mo+1,0).getDate();d++){const ds=`${y}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`,info=m[ds];let cls='',pt='';if(info){cls=info.net_pnl>0?'positive':info.net_pnl<0?'negative':'';pt=`<div style="font-size:7px;font-weight:700;margin-top:1px">${formatPnl(info.net_pnl,true)}</div>`}h+=`<div class="calendar-day ${cls}" onclick="${info?`selectDay('${ds}')`:''}"><div style="font-weight:500">${d}</div>${pt}</div>`}
+        h+='</div>';cur.setMonth(cur.getMonth()+1)} c.innerHTML=h;
+}
+
+async function loadDay(dateStr) {
+    const data = await (await fetch(`/api/day/${dateStr}`)).json();
+    document.getElementById('day-title').textContent = new Date(dateStr+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+    renderDayStats(data.stats); renderTrades(data.trades); renderJournal(data.journal); loadChart(dateStr);
+}
+
+function renderDayStats(stats) {
+    const c = document.getElementById('day-stats');
+    if (!stats) { c.innerHTML = ''; return; }
+    const pf = stats.profit_factor===Infinity?'∞':(stats.profit_factor||0).toFixed(2), n=stats.net_pnl||0;
+    const avgR = stats.avg_r_multiple != null ? `${stats.avg_r_multiple>=0?'+':''}${stats.avg_r_multiple.toFixed(2)}R` : 'N/A';
+    c.innerHTML = `
+        <div class="stat-card ${n>=0?'accent-green':'accent-red'} animate-in" style="--delay:0"><div class="stat-top"><div class="stat-label">Net P&L</div><div class="stat-badge ${n>=0?'sb-green':'sb-red'}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${n>=0?'var(--green)':'var(--red)'}" stroke-width="2.5"><path d="${n>=0?'M12 2v20M17 7l-5-5-5 5':'M12 22V2M7 17l5 5 5-5'}"/></svg></div></div><div class="stat-value ${n>=0?'positive':'negative'}">${formatPnl(n)}</div><div class="stat-sub">Gross: ${formatPnl(stats.gross_pnl)} · Fees: $${(stats.total_fees||0).toFixed(2)}</div></div>
+        <div class="stat-card accent-purple animate-in" style="--delay:1"><div class="stat-top"><div class="stat-label">Win Rate</div><div class="stat-badge sb-purple"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/></svg></div></div><div class="stat-value">${(stats.win_rate||0).toFixed(0)}%</div><div class="stat-sub">${stats.winning_trades}W · ${stats.losing_trades}L of ${stats.total_trades}</div></div>
+        <div class="stat-card animate-in" style="--delay:2"><div class="stat-top"><div class="stat-label">Profit Factor</div><div class="stat-badge sb-blue"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 12h2v6H7zM11 8h2v10h-2zM15 10h2v8h-2z"/></svg></div></div><div class="stat-value">${pf}</div></div>
+        <div class="stat-card animate-in" style="--delay:3"><div class="stat-top"><div class="stat-label">Avg R-Multiple</div><div class="stat-badge sb-yellow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--yellow)" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg></div></div><div class="stat-value">${avgR}</div></div>
+        <div class="stat-card accent-green animate-in" style="--delay:4"><div class="stat-top"><div class="stat-label">Largest Win</div><div class="stat-badge sb-green"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg></div></div><div class="stat-value positive">${formatPnl(stats.largest_win)}</div></div>
+        <div class="stat-card accent-red animate-in" style="--delay:5"><div class="stat-top"><div class="stat-label">Largest Loss</div><div class="stat-badge sb-red"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/></svg></div></div><div class="stat-value negative">${formatPnl(stats.largest_loss)}</div></div>
+        <div class="stat-card animate-in" style="--delay:6"><div class="stat-top"><div class="stat-label">Avg Hold Time</div><div class="stat-badge sb-yellow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--yellow)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div></div><div class="stat-value">${formatDuration(stats.avg_hold_time_seconds)}</div></div>
+        <div class="stat-card accent-red animate-in" style="--delay:7"><div class="stat-top"><div class="stat-label">Max Drawdown</div><div class="stat-badge sb-red"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2"><path d="M12 2v20M7 17l5 5 5-5"/></svg></div></div><div class="stat-value negative">${formatPnl(-stats.max_drawdown)}</div></div>`;
+}
+
+function renderTrades(trades) {
+    const tbody = document.getElementById('trades-tbody');
+    document.getElementById('trade-count').textContent = `${trades.length} trade${trades.length!==1?'s':''}`;
+    if (!trades.length) { tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:var(--text-muted);padding:30px">No trades for this session</td></tr>'; return; }
+    tbody.innerHTML = trades.map((t,i) => {
+        const et = t.entry_time?new Date(t.entry_time).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'-';
+        const xt = t.exit_time?new Date(t.exit_time).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'-';
+        const dur = t.entry_time&&t.exit_time?formatDuration((new Date(t.exit_time)-new Date(t.entry_time))/1000):'-';
+        const pnl=t.pnl||0,net=pnl-(t.fees||0);
+        const rText = t.r_multiple!=null?`<span style="color:${t.r_multiple>=0?'var(--green)':'var(--red)'};">${t.r_multiple>=0?'+':''}${t.r_multiple.toFixed(1)}R</span>`:'<span style="color:var(--text-muted)">-</span>';
+        const hasNotes = t.notes && t.notes.trim();
+        return `<tr class="animate-in" style="--delay:${i}">
+            <td style="color:var(--text-muted)">${i+1}</td><td><strong>${t.symbol}</strong></td>
+            <td><span class="badge badge-${t.side.toLowerCase()}">${t.side==='BUY'?'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 19V5M5 12l7-7 7 7"/></svg> Long':'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M19 12l-7 7-7-7"/></svg> Short'}</span></td>
+            <td>${t.quantity}</td><td>${t.entry_price?.toFixed(2)||'-'}</td><td>${t.exit_price?.toFixed(2)||'-'}</td>
+            <td style="color:var(--orange)">${t.stop_loss?.toFixed(2)||'-'}</td>
+            <td>${et}</td><td>${xt}</td><td class="hold-time">${dur}</td>
+            <td class="trade-pnl" style="color:${pnl>=0?'var(--green)':'var(--red)'}">${formatPnl(pnl)}</td>
+            <td>${rText}</td>
+            <td style="color:var(--text-muted);font-size:11px">$${(t.fees||0).toFixed(2)}</td>
+            <td class="trade-pnl" style="color:${net>=0?'var(--green)':'var(--red)'}">${formatPnl(net)}</td>
+            <td style="display:flex;gap:4px">
+                <button class="btn btn-sm ${hasNotes?'has-notes':''}" style="padding:4px 8px" onclick="openNotesModal(${t.id},'${(t.notes||'').replace(/'/g,"\\'").replace(/\n/g,'\\n')}')" title="${hasNotes?'Edit notes':'Add notes'}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg></button>
+                <button class="btn btn-sm" style="color:var(--red);border-color:rgba(255,42,109,0.2);padding:4px 8px" onclick="deleteTrade(${t.id})"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+            </td></tr>`;
+    }).join('');
+}
+
+function renderJournal(j) {
+    document.getElementById('j-premarket').value=j?.pre_market_plan||''; document.getElementById('j-postmarket').value=j?.post_market_review||'';
+    document.getElementById('j-lessons').value=j?.lessons||''; document.getElementById('j-mistakes').value=j?.mistakes||'';
+    selectedEmotions=j?.emotions?j.emotions.split(',').filter(Boolean):[]; document.querySelectorAll('.emotion-tag').forEach(t=>t.classList.toggle('selected',selectedEmotions.includes(t.dataset.emotion)));
+    selectedRating=j?.rating||0; updateRatingStars();
+}
+
+async function loadChart(dateStr) {
+    const c = document.getElementById('trade-chart'); c.innerHTML = '';
+    const data = await (await fetch(`/api/chart-data/${dateStr}?interval=${currentInterval}`)).json();
+    document.getElementById('chart-symbol').textContent = `${data.symbol||'ES'} Futures`;
+    chart = LightweightCharts.createChart(c, { width:c.clientWidth,height:450,layout:{background:{color:'#05050e'},textColor:'#3d3660',fontFamily:'Inter'},grid:{vertLines:{color:'rgba(255,255,255,0.02)'},horzLines:{color:'rgba(255,255,255,0.02)'}},rightPriceScale:{borderColor:'rgba(255,255,255,0.04)'},timeScale:{borderColor:'rgba(255,255,255,0.04)',timeVisible:true,secondsVisible:false},crosshair:{mode:0}});
+    if (data.candles?.length) {
+        const cs = chart.addCandlestickSeries({upColor:'#00ffaa',downColor:'#ff2a6d',borderUpColor:'#00ffaa',borderDownColor:'#ff2a6d',wickUpColor:'#00ffaa',wickDownColor:'#ff2a6d'});
+        cs.setData(data.candles);
+        const chartMarkers = data.markers.filter(m=>m.type!=='stop_loss');
+        if (chartMarkers.length) cs.setMarkers(chartMarkers.map(m=>({time:m.time,position:m.position,color:m.color,shape:m.shape,text:m.text})));
+        data.markers.forEach(m => { if(m.type==='stop_loss'){cs.createPriceLine({price:m.price,color:'#ff9f0a',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'Stop'})} else {cs.createPriceLine({price:m.price,color:m.type==='entry'?m.color:'#bf5af2',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:m.type==='entry'?'Entry':'Exit'})}});
+        chart.timeScale().fitContent();
+    } else { c.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:12px">${data.markers?.length?'Market data not available':'No chart data'}</div>`; }
+    new ResizeObserver(()=>{if(chart)chart.applyOptions({width:c.clientWidth})}).observe(c);
+}
+
+// ─── Actions
+async function addTrade() {
+    const data = {symbol:document.getElementById('at-symbol').value,side:document.getElementById('at-side').value,quantity:document.getElementById('at-qty').value,entry_price:document.getElementById('at-entry').value,exit_price:document.getElementById('at-exit').value,stop_loss:document.getElementById('at-stop').value,entry_time:document.getElementById('at-entry-time').value,exit_time:document.getElementById('at-exit-time').value,fees:document.getElementById('at-fees').value,notes:document.getElementById('at-notes').value};
+    if (!data.entry_price){toast('Enter an entry price','error');return}
+    const r = await fetch('/api/trades',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    if (r.ok){toast('Trade added','success');loadTradingDays();['at-entry','at-exit','at-stop','at-entry-time','at-exit-time','at-notes'].forEach(id=>document.getElementById(id).value='')}else toast('Error adding trade','error');
+}
+
+async function deleteTrade(id){if(!confirm('Delete this trade?'))return;const r=await fetch(`/api/trades/${id}`,{method:'DELETE'});if(r.ok){toast('Trade deleted','success');loadTradingDays();if(currentDate)loadDay(currentDate)}}
+
+async function saveJournal(){const data={date:currentDate,pre_market_plan:document.getElementById('j-premarket').value,post_market_review:document.getElementById('j-postmarket').value,emotions:selectedEmotions.join(','),rating:selectedRating,lessons:document.getElementById('j-lessons').value,mistakes:document.getElementById('j-mistakes').value};const r=await fetch('/api/journal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(r.ok)toast('Journal saved','success')}
+
+// CSV import state
+let _pendingImportFile = null;
+
+async function previewCSV(input){
+    const file=input.files[0];if(!file)return;
+    _pendingImportFile=file;
+    const fd=new FormData();fd.append('file',file);
+    const st=document.getElementById('import-status');
+    st.style.display='block';
+    st.innerHTML='<p style="color:var(--purple);font-size:12px;display:flex;align-items:center;gap:8px"><span class="spinner" style="width:14px;height:14px"></span> Parsing CSV...</p>';
+    document.getElementById('import-preview-card').style.display='none';
+    try{
+        const r=await fetch('/api/import?preview=true',{method:'POST',body:fd});
+        const data=await r.json();
+        if(!r.ok){st.innerHTML=`<div style="padding:14px;background:var(--red-dim);border-radius:10px;color:var(--red);border:1px solid rgba(255,42,109,0.1);font-size:13px">${data.error}</div>`;_pendingImportFile=null;input.value='';return}
+        st.style.display='none';
+        showImportPreview(data.trades);
+    }catch(e){st.innerHTML=`<div style="padding:14px;background:var(--red-dim);border-radius:10px;color:var(--red);border:1px solid rgba(255,42,109,0.1);font-size:13px">Error reading file: ${e.message}</div>`;_pendingImportFile=null}
+    input.value='';
+}
+
+function showImportPreview(trades){
+    const card=document.getElementById('import-preview-card');
+    card.style.display='block';
+    document.getElementById('preview-count').textContent=`(${trades.length} trade${trades.length!==1?'s':''})`;
+    const tbody=document.getElementById('preview-tbody');
+    tbody.innerHTML='';
+    let totalPnl=0,totalFees=0,wins=0,losses=0;
+    trades.forEach(t=>{
+        const pnl=t.pnl||0;totalPnl+=pnl;totalFees+=t.fees||0;
+        if(pnl>0)wins++;if(pnl<0)losses++;
+        const pnlColor=pnl>=0?'var(--green)':'var(--red)';
+        const sideColor=t.side==='BUY'?'var(--green)':'var(--red)';
+        const dateParts=t.entry_time?t.entry_time.split('T'):['',''];
+        const dateStr=t.date||(dateParts[0]||'');
+        const timeStr=dateParts[1]?dateParts[1].substring(0,8):'';
+        tbody.innerHTML+=`<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+            <td style="padding:9px 12px;color:var(--text-secondary);white-space:nowrap">${dateStr}${timeStr?' <span style="color:var(--text-muted)">'+timeStr+'</span>':''}</td>
+            <td style="padding:9px 12px;color:var(--text-primary);font-weight:600">${t.symbol}</td>
+            <td style="padding:9px 12px;color:${sideColor};font-weight:600;font-size:11px">${t.side}</td>
+            <td style="padding:9px 12px;text-align:right;color:var(--text-secondary)">${t.entry_price}</td>
+            <td style="padding:9px 12px;text-align:right;color:var(--text-secondary)">${t.exit_price||'-'}</td>
+            <td style="padding:9px 12px;text-align:center;color:var(--text-secondary)">${t.quantity}</td>
+            <td style="padding:9px 12px;text-align:right;color:${pnlColor};font-weight:600">${pnl>=0?'+':''}$${pnl.toFixed(2)}</td>
+            <td style="padding:9px 12px;text-align:right;color:var(--text-muted)">$${(t.fees||0).toFixed(2)}</td>
+        </tr>`;
+    });
+    const netPnl=totalPnl-totalFees;
+    const summary=document.getElementById('preview-summary');
+    summary.innerHTML=`
+        <div><span style="color:var(--text-muted)">Trades:</span> <strong style="color:var(--text-primary)">${trades.length}</strong></div>
+        <div><span style="color:var(--text-muted)">Winners:</span> <strong style="color:var(--green)">${wins}</strong></div>
+        <div><span style="color:var(--text-muted)">Losers:</span> <strong style="color:var(--red)">${losses}</strong></div>
+        <div><span style="color:var(--text-muted)">Gross P&L:</span> <strong style="color:${totalPnl>=0?'var(--green)':'var(--red)'}">${totalPnl>=0?'+':''}$${totalPnl.toFixed(2)}</strong></div>
+        <div><span style="color:var(--text-muted)">Fees:</span> <strong style="color:var(--text-secondary)">$${totalFees.toFixed(2)}</strong></div>
+        <div><span style="color:var(--text-muted)">Net P&L:</span> <strong style="color:${netPnl>=0?'var(--green)':'var(--red)'}">${netPnl>=0?'+':''}$${netPnl.toFixed(2)}</strong></div>`;
+}
+
+function cancelImport(){
+    document.getElementById('import-preview-card').style.display='none';
+    _pendingImportFile=null;
+    document.getElementById('import-status').style.display='none';
+}
+
+async function confirmImport(){
+    if(!_pendingImportFile){toast('No file to import','error');return}
+    const btn=document.getElementById('confirm-import-btn');
+    btn.disabled=true;btn.innerHTML='<span class="spinner" style="width:13px;height:13px"></span> Importing...';
+    const fd=new FormData();fd.append('file',_pendingImportFile);
+    const rd=document.getElementById('import-result');
+    try{
+        const r=await fetch('/api/import',{method:'POST',body:fd});
+        const data=await r.json();
+        if(r.ok){
+            document.getElementById('import-preview-card').style.display='none';
+            rd.style.display='block';
+            rd.innerHTML=`<div style="padding:14px;background:var(--green-dim);border-radius:10px;color:var(--green);border:1px solid rgba(0,255,170,0.1);font-size:13px"><strong>${data.imported} trades imported</strong> -- ${data.dates.length} day(s): ${data.dates.join(', ')}</div>`;
+            loadTradingDays();toast(`${data.imported} trades imported`,'success');
+        }else{
+            rd.style.display='block';
+            rd.innerHTML=`<div style="padding:14px;background:var(--red-dim);border-radius:10px;color:var(--red);border:1px solid rgba(255,42,109,0.1);font-size:13px">${data.error}</div>`;
+        }
+    }catch(e){rd.style.display='block';rd.innerHTML=`<div style="padding:14px;background:var(--red-dim);border-radius:10px;color:var(--red);border:1px solid rgba(255,42,109,0.1);font-size:13px">Network error: ${e.message}</div>`}
+    finally{btn.disabled=false;btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Confirm Import';_pendingImportFile=null}
+}
+
+// ─── Trade Notes Modal
+function openNotesModal(id, notes){editingTradeId=id;document.getElementById('modal-notes').value=notes.replace(/\\n/g,'\n');document.getElementById('notes-modal').classList.add('active')}
+function closeNotesModal(){document.getElementById('notes-modal').classList.remove('active');editingTradeId=null}
+async function saveTradeNotes(){if(!editingTradeId)return;const r=await fetch(`/api/trades/${editingTradeId}/notes`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({notes:document.getElementById('modal-notes').value})});if(r.ok){toast('Notes saved','success');closeNotesModal();if(currentDate)loadDay(currentDate)}}
+
+// ─── AI Analysis
+async function analyzeDay(){if(!currentDate)return;const btn=document.getElementById('analyze-btn');btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Analyzing...';document.getElementById('ai-analysis').innerHTML='<div class="pulse-bar"></div><div class="pulse-bar" style="width:80%"></div><div class="pulse-bar" style="width:60%"></div>';
+    try{const r=await fetch('/api/ai/analyze-day',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:currentDate})});const data=await r.json();document.getElementById('ai-analysis').innerHTML=marked.parse(data.analysis)}catch(e){document.getElementById('ai-analysis').innerHTML=`<p style="color:var(--red)">Error: ${e.message}</p>`}finally{btn.disabled=false;btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2a4 4 0 014 4c0 1.95-2 3-2 8h-4c0-5-2-6.05-2-8a4 4 0 014-4z"/></svg> Analyze'}}
+
+// ─── AMP/Rithmic
+async function loadAmpStatus(){const data=await(await fetch('/api/rithmic/status')).json();const el=document.getElementById('amp-status');el.innerHTML=data.connected?`<div class="amp-badge connected"><div class="amp-dot"></div><span>AMP Connected · ${data.account||''}</span></div>`:`<div class="amp-badge ${data.configured?'configured':'disconnected'}"><div class="amp-dot"></div><span>${data.configured?'AMP Configured':'AMP Not Connected'}</span></div>`}
+
+async function loadRithmicSettings(){const data=await(await fetch('/api/rithmic/settings')).json();document.getElementById('s-rithmic-user').value=data.user||'';document.getElementById('s-rithmic-system').value=data.system||'Rithmic Paper Trading';document.getElementById('s-rithmic-gw').value=data.gateway||'CHICAGO';document.getElementById('s-rithmic-acct').value=data.account_id||''}
+
+async function saveRithmicSettings(){const data={user:document.getElementById('s-rithmic-user').value,password:document.getElementById('s-rithmic-pass').value,system:document.getElementById('s-rithmic-system').value,gateway:document.getElementById('s-rithmic-gw').value,account_id:document.getElementById('s-rithmic-acct').value};await fetch('/api/rithmic/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});toast('Settings saved','success');loadAmpStatus()}
+
+function getRithmicFormCreds(){return{user:document.getElementById('s-rithmic-user').value,password:document.getElementById('s-rithmic-pass').value,system:document.getElementById('s-rithmic-system').value,gateway:document.getElementById('s-rithmic-gw').value,account_id:document.getElementById('s-rithmic-acct').value}}
+
+async function testRithmic(){const rd=document.getElementById('rithmic-result');const creds=getRithmicFormCreds();if(!creds.user||!creds.password){rd.innerHTML='<span style="color:var(--red)">Enter username and password first</span>';return}rd.innerHTML='<span style="color:var(--purple)">Connecting to Rithmic...</span>';const r=await fetch('/api/rithmic/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(creds)});const data=await r.json();if(data.ok){rd.innerHTML=`<span style="color:var(--green)">Connected! Accounts: ${data.accounts.map(a=>a.account_id).join(', ')}</span>`;loadAmpStatus()}else{let msg=data.error||'Connection failed';if(msg.toLowerCase().includes('timed out'))msg='Connection timed out. Try selecting "Rithmic Paper Trading" as the System Name, which is more reliable for testing.';else if(msg.toLowerCase().includes('permission denied'))msg='Invalid username or password';else if(msg.toLowerCase().includes('system name'))msg='Wrong system name for this account';rd.innerHTML=`<span style="color:var(--red)">${msg}</span>`}}
+
+async function syncRithmic(){const rd=document.getElementById('rithmic-result');const creds=getRithmicFormCreds();if(!creds.password){rd.innerHTML='<span style="color:var(--red)">Enter your password to sync</span>';return}rd.innerHTML='<span style="color:var(--purple)">Syncing trades...</span>';const r=await fetch('/api/rithmic/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:new Date().toISOString().split('T')[0],...creds})});const data=await r.json();if(r.ok){rd.innerHTML=`<span style="color:var(--green)">${data.imported} trades synced for ${data.date}</span>`;loadTradingDays()}else{let msg=data.error||'Sync failed';if(msg.toLowerCase().includes('timed out'))msg='Connection timed out. Try selecting "Rithmic Paper Trading" as the System Name, which is more reliable for testing.';else if(msg.toLowerCase().includes('permission denied'))msg='Invalid username or password';else if(msg.toLowerCase().includes('system name'))msg='Wrong system name for this account';rd.innerHTML=`<span style="color:var(--red)">${msg}</span>`}}
+
+async function saveAISettings(){const data={};const ak=document.getElementById('s-anthropic-key').value;const ok=document.getElementById('s-openai-key').value;if(ak)data.anthropic_api_key=ak;if(ok)data.openai_api_key=ok;await fetch('/api/ai/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});toast('AI settings saved','success');document.getElementById('ai-settings-result').innerHTML='<span style="color:var(--green)">Saved!</span>'}
+
+// ─── UI Helpers
+function setupEmotionTags(){document.querySelectorAll('.emotion-tag').forEach(t=>t.addEventListener('click',()=>{const e=t.dataset.emotion;if(selectedEmotions.includes(e)){selectedEmotions=selectedEmotions.filter(x=>x!==e);t.classList.remove('selected')}else{selectedEmotions.push(e);t.classList.add('selected')}}))}
+function setupRating(){document.querySelectorAll('.rating-star').forEach(s=>s.addEventListener('click',()=>{selectedRating=parseInt(s.dataset.value);updateRatingStars()}))}
+function updateRatingStars(){document.querySelectorAll('.rating-star').forEach(s=>s.classList.toggle('active',parseInt(s.dataset.value)<=selectedRating))}
+function setupDragDrop(){const a=document.getElementById('upload-area');if(!a)return;a.addEventListener('dragover',e=>{e.preventDefault();a.style.borderColor='rgba(191,90,242,0.6)';a.style.background='rgba(191,90,242,0.06)';a.style.boxShadow='0 0 40px rgba(191,90,242,0.1)'});a.addEventListener('dragleave',()=>{a.style.borderColor='';a.style.background='';a.style.boxShadow=''});a.addEventListener('drop',e=>{e.preventDefault();a.style.borderColor='';a.style.background='';a.style.boxShadow='';const f=e.dataTransfer.files[0];if(f&&f.name.toLowerCase().endsWith('.csv')){const i=document.getElementById('csv-file');const dt=new DataTransfer();dt.items.add(f);i.files=dt.files;previewCSV(i)}else if(f){const st=document.getElementById('import-status');st.style.display='block';st.innerHTML='<div style="padding:14px;background:var(--red-dim);border-radius:10px;color:var(--red);border:1px solid rgba(255,42,109,0.1);font-size:13px">Only CSV files are supported. Please drop a .csv file.</div>'}})}
+function formatPnl(v,compact){if(v==null)return'$0.00';const s=v>=0?'+':'';return compact?`${s}$${Math.abs(v).toFixed(0)}`:`${s}$${v.toFixed(2)}`}
+function formatDuration(s){if(!s||s<=0)return'-';if(s<60)return`${Math.round(s)}s`;if(s<3600)return`${Math.floor(s/60)}m ${Math.round(s%60)}s`;return`${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`}
+function toast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.className=`toast ${type} show`;setTimeout(()=>t.classList.remove('show'),3000)}
+</script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+"""Vanity pixel art elements."""

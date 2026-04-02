@@ -1,0 +1,2 @@
+#!/bin/zsh
+cd ~/trading && ./bin/python3 news_alert.py

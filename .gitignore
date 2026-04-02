@@ -1,0 +1,53 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environment (venv lives at project root)
+bin/
+include/
+lib/
+lib64/
+pyvenv.cfg
+share/
+
+# Databases
+*.db
+*.sqlite
+*.db-wal
+*.db-shm
+
+# Runtime / data files
+var/
+*.log
+gex_levels.json
+gex_cron.log
+
+# Environment / secrets
+.env
+.env.*
+*.env
+trade_journal/settings.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temp
+/tmp/
+*.tmp
+*.bak
+
+# Build artifacts
+dist/
+build/
+*.egg-info/

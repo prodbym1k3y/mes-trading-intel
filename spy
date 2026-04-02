@@ -1,0 +1,2 @@
+#!/bin/zsh
+./bin/python3 news_alert.py
