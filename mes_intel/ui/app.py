@@ -1,15 +1,7 @@
-"""Main desktop application window — Phase 3 Enhanced.
+"""Main desktop application window.
 
 Retro-animated terminal aesthetic with live signal dashboard,
-advanced order flow, footprint charts, dark pool, analytics, and vanity art.
-
-Phase 3 additions:
-  - BigTradesWidget + BigTradesHeatmap + BigTradesStatsPanel (big_trades.py)
-  - Full ATAS footprint (footprint_atas.py)
-  - Session profiles RTH/Overnight (session_profiles.py)
-  - Easter egg system (easter_eggs.py)
-  - NeonLineChart with glow/zoom/pan (charts_enhanced.py)
-  - CRT scanline + glowing borders
+dark pool, analytics, and vanity art.
 """
 from __future__ import annotations
 
@@ -28,18 +20,15 @@ from PySide6.QtGui import QFont, QKeyEvent
 from .theme import STYLESHEET, COLORS
 from .widgets import (
     ScanlineOverlay, SignalPanel, StrategyScorecard,
-    VolumeProfileWidget, DeltaProfileWidget, FootprintChartWidget,
+    VolumeProfileWidget, DeltaProfileWidget,
     TradeTable, StatsPanel, NewsFeed, ConfidenceMeter,
     # Phase 2 widgets
     BigTradesWidget, InstitutionalFlowWidget,
     DOMImbalanceWidget, OrderFlowSummaryWidget,
 )
 from .analytics import AnalyticsDashboard
-from .footprint_advanced import AdvancedFootprintWidget, FloatingFootprintWindow
 from .vanity.pixel_art import VanityManager
-from .big_trades_chart import BigTradePanel
-from .session_profiles import SessionProfilesWidget, SessionManager, current_session
-from .footprint_atas import ATASFootprintPanel
+from .session_profiles import current_session
 
 # Phase 3 — new modules
 from .big_trades import (
@@ -50,9 +39,6 @@ from .big_trades import (
 from .easter_eggs import EasterEggManager as EggManager
 from .cross_asset_panel import CrossAssetPanel
 from .settings_panel import SettingsPanel, AppOptimizerPanel
-from .charts_enhanced import (
-    NeonLineChart, make_equity_chart, make_drawdown_chart, make_delta_chart,
-)
 
 # Phase 5 — reactive effects + vanity sprites
 from .reactive_fx import (
@@ -62,9 +48,8 @@ from .reactive_fx import (
 from .vanity_sprites import create_vanity_sprites
 
 # Phase 4 — cyberpunk enhancements
-from .combined_footprint import FootprintCommandCenter
 from .indicators_enhanced import (
-    SignalsIndicatorStrip, OrderFlowIndicatorStrip,
+    SignalsIndicatorStrip,
     JournalIndicatorStrip, MetaIndicatorStrip,
 )
 from .cyberpunk_fx import (
@@ -74,10 +59,11 @@ from .cyberpunk_fx import (
 from .journal_enhanced import EnhancedJournalTab
 from .signals_enhanced import EnhancedSignalsPanel
 from .ai_chat import AIChatPanel
+from .meta_ai_enhanced import MetaAIDashboard
 from ..config import AppConfig
 from ..database import Database
 from ..event_bus import EventBus, Event, EventType
-from ..orderflow import VolumeProfile, FootprintChart
+from ..orderflow import VolumeProfile
 
 log = logging.getLogger(__name__)
 
@@ -86,7 +72,7 @@ class MainWindow(QMainWindow):
     """Main application window."""
 
     def __init__(self, config: AppConfig, db: Database, bus: EventBus,
-                 market_brain=None, app_optimizer=None):
+                 market_brain=None, app_optimizer=None, meta_learner=None):
         super().__init__()
         self.config = config
         self.db = db
@@ -95,14 +81,12 @@ class MainWindow(QMainWindow):
         # Phase 4 agents (optional — UI gracefully handles None)
         self._market_brain  = market_brain
         self._app_optimizer = app_optimizer
+        self._meta_learner  = meta_learner
 
         self.setWindowTitle("▸▸ MES TRADING INTELLIGENCE // v4.0 NEON ◈◈")
         self.resize(config.window_width, config.window_height)
         self.setStyleSheet(STYLESHEET)
         self.setMinimumSize(1200, 700)
-
-        # Session manager must be initialized before _build_ui
-        self._session_mgr = SessionManager()
 
         # Phase 3: standalone big trades engine (shared across tabs)
         self._big_trades_engine = BigTradesEngine()
@@ -194,12 +178,16 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-        # Floating footprint window ref
-        self._floating_footprint: FloatingFootprintWindow | None = None
-
         # Phase 2: track recent big trades for BigTradesWidget
         self._recent_big_trades: list[dict] = []
         self._recent_institutional: list[dict] = []
+
+        # Wire meta_learner into the META-AI dashboard
+        if self._meta_learner is not None:
+            try:
+                self.meta_ai_dashboard.set_meta_learner(self._meta_learner)
+            except Exception:
+                pass
 
         log.info("Main window Phase 2 initialized")
 
@@ -224,34 +212,13 @@ class MainWindow(QMainWindow):
         self.tabs.setTabBar(NeonTabBar())
         main_layout.addWidget(self.tabs, 1)
 
-        # Tab 1: Signal Dashboard (enhanced with indicators)
         self.tabs.addTab(self._build_dashboard_tab(), "◈ SIGNALS")
-
-        # Tab 2: Unified Footprint Command Center (replaces ORDER FLOW + FLOW+)
-        self.tabs.addTab(self._build_footprint_tab(), "▶ FOOTPRINT")
-
-        # Tab 3: Big Trades (Phase 3)
         self.tabs.addTab(self._build_big_trades_tab(), "★ BIG TRADES")
-
-        # Tab 4: Trade Journal (enhanced with stats)
         self.tabs.addTab(self._build_journal_tab(), "◆ JOURNAL")
-
-        # Tab 5: Meta-Learner (enhanced with charts)
         self.tabs.addTab(self._build_meta_tab(), "▸ META-AI")
-
-        # Tab 6: Charts (Phase 3)
-        self.tabs.addTab(self._build_charts_tab(), "◈ CHARTS")
-
-        # Tab 7: Analytics
         self.tabs.addTab(self._build_analytics_tab(), "◆ ANALYTICS")
-
-        # Tab 8: Cross-Asset Intelligence (Phase 3)
         self.tabs.addTab(self._build_cross_asset_tab(), "⬡ INTEL")
-
-        # Tab 9: AI Assistant
         self.tabs.addTab(self._build_ai_assistant_tab(), "◈ AI ASSISTANT")
-
-        # Tab 10: Settings
         self.tabs.addTab(self._build_settings_tab(), "⚙ SETTINGS")
 
         # Glitch on tab change
@@ -305,6 +272,10 @@ class MainWindow(QMainWindow):
         self._pnl_status_label = QLabel("P&L: --")
         self._pnl_status_label.setStyleSheet(f"color: {COLORS['text_muted']}; " + _sb_base)
 
+        self._cum_pnl_label = QLabel("Σ $0.00")
+        self._cum_pnl_label.setStyleSheet(f"color: {COLORS['text_muted']}; " + _sb_base)
+        self._cum_pnl_label.setToolTip("Cumulative session P&L")
+
         self._conn_label = QLabel("● OFFLINE")
         self._conn_label.setStyleSheet(
             f"color: {COLORS['pink']}; font-weight: bold; " + _sb_base
@@ -314,6 +285,7 @@ class MainWindow(QMainWindow):
         self.status_bar.addPermanentWidget(self._agents_label)
         self.status_bar.addPermanentWidget(self._signals_count_label)
         self.status_bar.addPermanentWidget(self._pnl_status_label)
+        self.status_bar.addPermanentWidget(self._cum_pnl_label)
         self.status_bar.addPermanentWidget(self._conn_label)
         self.status_bar.addPermanentWidget(self._clock_label)
 
@@ -513,130 +485,6 @@ class MainWindow(QMainWindow):
 
         return tab
 
-    def _build_footprint_tab(self) -> QWidget:
-        """Footprint Command Center — ATAS bid×ask footprint + session profiles."""
-        tab = QWidget()
-        root = QVBoxLayout(tab)
-        root.setContentsMargins(4, 0, 4, 4)
-        root.setSpacing(4)
-        root.addWidget(self._make_tab_header("▶", "FOOTPRINT COMMAND CENTER", "ORDER FLOW INTELLIGENCE"))
-
-        # Main splitter: session profiles left | ATAS footprint right
-        main_split = QSplitter(Qt.Orientation.Horizontal)
-
-        # Left panel: session profiles (RTH + Overnight volume/delta histograms)
-        self.session_profiles = SessionProfilesWidget(self._session_mgr)
-        self.session_profiles.setMinimumWidth(280)
-        main_split.addWidget(self.session_profiles)
-
-        # Right panel: ATAS bid×ask footprint grid
-        self.atas_footprint = ATASFootprintPanel()
-        main_split.addWidget(self.atas_footprint)
-
-        main_split.setSizes([300, 900])
-        root.addWidget(main_split, 1)
-
-        # Order flow indicator strip at bottom
-        self.flow_indicators = OrderFlowIndicatorStrip()
-        root.addWidget(self.flow_indicators)
-
-        # Hidden compatibility widgets (keep event handlers working without errors)
-        self.footprint_cmd = FootprintCommandCenter()
-        self.footprint_cmd.setVisible(False)
-        self.advanced_footprint = AdvancedFootprintWidget()
-        self.advanced_footprint.setVisible(False)
-        self.big_trade_panel = BigTradePanel()
-        self.big_trade_panel.setVisible(False)
-        self.footprint_chart = FootprintChartWidget()
-        self.footprint_chart.setVisible(False)
-        self.full_volume_profile = VolumeProfileWidget()
-        self.full_volume_profile.setVisible(False)
-        self.full_delta_profile = DeltaProfileWidget()
-        self.full_delta_profile.setVisible(False)
-
-        self.cd_readout = QLabel("")
-        self.cd_readout.setVisible(False)
-        self.vp_readout = QLabel("")
-        self.vp_readout.setVisible(False)
-
-        return tab
-
-    def _build_orderflow_tab(self) -> QWidget:
-        """Order flow tab — session profiles, ATAS footprint, big trades panel."""
-        tab = QWidget()
-        root = QVBoxLayout(tab)
-        root.setContentsMargins(4, 4, 4, 4)
-        root.setSpacing(4)
-
-        # Top splitter: session profiles on left, big trades on right
-        top_splitter = QSplitter(Qt.Orientation.Horizontal)
-
-        # ── Session Profiles ─────────────────────────────────────────────
-        self.session_profiles = SessionProfilesWidget(self._session_mgr)
-        top_splitter.addWidget(self.session_profiles)
-
-        # ── Big Trades Panel ─────────────────────────────────────────────
-        bt_frame = QFrame()
-        bt_frame.setObjectName("panel")
-        bt_layout = QVBoxLayout(bt_frame)
-        bt_title = QLabel("BIG TRADES INDICATOR")
-        bt_title.setObjectName("subtitle")
-        bt_layout.addWidget(bt_title)
-        self.big_trade_panel = BigTradePanel()
-        bt_layout.addWidget(self.big_trade_panel, 1)
-        top_splitter.addWidget(bt_frame)
-
-        top_splitter.setSizes([600, 400])
-        root.addWidget(top_splitter, 3)
-
-        # Bottom: ATAS footprint + cumulative delta readout
-        bot_splitter = QSplitter(Qt.Orientation.Horizontal)
-
-        # ATAS footprint (primary)
-        self.atas_footprint = ATASFootprintPanel()
-        bot_splitter.addWidget(self.atas_footprint)
-
-        # Right side: legacy advanced footprint (kept for compatibility)
-        fp_frame = QFrame()
-        fp_frame.setObjectName("panel")
-        fp_layout = QVBoxLayout(fp_frame)
-        fp_header = QHBoxLayout()
-        fp_title = QLabel("DELTA FOOTPRINT")
-        fp_title.setObjectName("subtitle")
-        fp_header.addWidget(fp_title)
-        fp_header.addStretch()
-        pop_btn = QPushButton("POP OUT")
-        pop_btn.setFixedHeight(22)
-        pop_btn.clicked.connect(self._pop_out_footprint)
-        fp_header.addWidget(pop_btn)
-        fp_layout.addLayout(fp_header)
-
-        self.advanced_footprint = AdvancedFootprintWidget()
-        fp_layout.addWidget(self.advanced_footprint, 1)
-
-        self.footprint_chart = FootprintChartWidget()
-        self.footprint_chart.setVisible(False)
-
-        self.cd_readout = QLabel("Cumulative Delta: 0 | Session Volume: 0")
-        self.cd_readout.setStyleSheet(f"color: {COLORS['cyan']}; font-size: 11px; padding: 4px;")
-        fp_layout.addWidget(self.cd_readout)
-
-        self.vp_readout = QLabel("POC: - | VAH: - | VAL: -")
-        self.vp_readout.setStyleSheet(f"color: {COLORS['cyan']}; font-size: 11px; padding: 4px;")
-        fp_layout.addWidget(self.vp_readout)
-        bot_splitter.addWidget(fp_frame)
-
-        bot_splitter.setSizes([500, 400])
-        root.addWidget(bot_splitter, 2)
-
-        # Hidden legacy profile widgets (keep for event handler compat)
-        self.full_volume_profile = VolumeProfileWidget()
-        self.full_volume_profile.setVisible(False)
-        self.full_delta_profile = DeltaProfileWidget()
-        self.full_delta_profile.setVisible(False)
-
-        return tab
-
     def _build_big_trades_tab(self) -> QWidget:
         """Phase 3: Full big trades indicator — dot chart, heatmap, stats."""
         tab = QWidget()
@@ -680,53 +528,6 @@ class MainWindow(QMainWindow):
 
         return tab
 
-    def _build_charts_tab(self) -> QWidget:
-        """Phase 3: Neon line charts — equity curve, drawdown, cumulative delta."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 0, 4, 4)
-        layout.setSpacing(4)
-        layout.addWidget(self._make_tab_header("◈", "PERFORMANCE CHARTS", "EQUITY · DRAWDOWN · DELTA"))
-
-        splitter = QSplitter(Qt.Orientation.Vertical)
-
-        # Equity curve
-        eq_frame = QFrame()
-        eq_frame.setObjectName("panel")
-        eq_layout = QVBoxLayout(eq_frame)
-        eq_layout.setContentsMargins(2, 2, 2, 2)
-        self.equity_chart = make_equity_chart()
-        eq_layout.addWidget(self.equity_chart)
-        splitter.addWidget(eq_frame)
-
-        # Drawdown
-        dd_frame = QFrame()
-        dd_frame.setObjectName("panel")
-        dd_layout = QVBoxLayout(dd_frame)
-        dd_layout.setContentsMargins(2, 2, 2, 2)
-        self.drawdown_chart = make_drawdown_chart()
-        dd_layout.addWidget(self.drawdown_chart)
-        splitter.addWidget(dd_frame)
-
-        # Cumulative delta
-        delta_frame = QFrame()
-        delta_frame.setObjectName("panel")
-        delta_layout = QVBoxLayout(delta_frame)
-        delta_layout.setContentsMargins(2, 2, 2, 2)
-        self.delta_chart = make_delta_chart()
-        delta_layout.addWidget(self.delta_chart)
-        splitter.addWidget(delta_frame)
-
-        splitter.setSizes([200, 160, 160])
-        layout.addWidget(splitter, 1)
-
-        # Tip label
-        tip = QLabel("Scroll to zoom · Drag to pan · Hover for values")
-        tip.setStyleSheet(f"color: {COLORS.get('text_muted', '#556')}; font-size: 9px; padding: 2px 8px;")
-        layout.addWidget(tip)
-
-        return tab
-
     def _build_journal_tab(self) -> QWidget:
         """Trade journal tab — full Tradezella-style AI journal (Phase 5)."""
         tab = QWidget()
@@ -750,121 +551,30 @@ class MainWindow(QMainWindow):
 
         return tab
 
-    def _build_advanced_flow_tab(self) -> QWidget:
-        """Phase 2: Advanced Order Flow tab with big trades, institutional signals, DOM."""
-        tab = QWidget()
-        layout = QHBoxLayout(tab)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(4)
-
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-
-        # Left: Big Trades + Order Flow Summary
-        left_frame = QFrame()
-        left_frame.setObjectName("panel")
-        left_layout = QVBoxLayout(left_frame)
-
-        flow_title = QLabel("ORDER FLOW INTELLIGENCE")
-        flow_title.setObjectName("subtitle")
-        left_layout.addWidget(flow_title)
-
-        self.order_flow_summary = OrderFlowSummaryWidget()
-        left_layout.addWidget(self.order_flow_summary)
-
-        bt_title = QLabel("BIG TRADES")
-        bt_title.setObjectName("subtitle")
-        left_layout.addWidget(bt_title)
-
-        self.big_trades_widget = BigTradesWidget()
-        left_layout.addWidget(self.big_trades_widget, 1)
-
-        splitter.addWidget(left_frame)
-
-        # Center: Institutional Flow
-        inst_frame = QFrame()
-        inst_frame.setObjectName("panel")
-        inst_layout = QVBoxLayout(inst_frame)
-
-        inst_title = QLabel("INSTITUTIONAL PATTERNS")
-        inst_title.setObjectName("subtitle")
-        inst_layout.addWidget(inst_title)
-
-        self.institutional_flow_widget = InstitutionalFlowWidget()
-        inst_layout.addWidget(self.institutional_flow_widget, 1)
-
-        splitter.addWidget(inst_frame)
-
-        # Right: DOM Imbalance
-        dom_frame = QFrame()
-        dom_frame.setObjectName("panel")
-        dom_layout = QVBoxLayout(dom_frame)
-
-        dom_title = QLabel("DOM IMBALANCE")
-        dom_title.setObjectName("subtitle")
-        dom_layout.addWidget(dom_title)
-
-        self.dom_imbalance_widget = DOMImbalanceWidget()
-        dom_layout.addWidget(self.dom_imbalance_widget, 1)
-
-        splitter.addWidget(dom_frame)
-        splitter.setSizes([300, 400, 200])
-        layout.addWidget(splitter)
-
-        return tab
-
     def _build_meta_tab(self) -> QWidget:
-        """Meta-learner post-mortem, RL feedback, and visual intelligence tab."""
+        """Meta-AI intelligence dashboard — Phase 5 enhanced."""
         tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(4, 0, 4, 4)
         layout.setSpacing(4)
-        layout.addWidget(self._make_tab_header("▸", "META-AI ENGINE", "REINFORCEMENT LEARNING · POST-MORTEM"))
+        layout.addWidget(self._make_tab_header(
+            "▸", "META-AI ENGINE",
+            "8 AGENTS · TEAM IQ · REGIME MATRIX · LEARNING TIMELINE"
+        ))
 
-        # Phase 4: visual charts strip at top
+        # Phase 4: visual indicator strip still at top
         self.meta_indicators = MetaIndicatorStrip()
         layout.addWidget(self.meta_indicators)
 
-        main_split = QSplitter(Qt.Orientation.Horizontal)
+        # Phase 5: full enhanced dashboard
+        self.meta_ai_dashboard = MetaAIDashboard(db=self.db)
+        layout.addWidget(self.meta_ai_dashboard, 1)
 
-        # Left: Post-mortem log
-        pm_frame = QFrame()
-        pm_frame.setObjectName("panel")
-        pm_layout = QVBoxLayout(pm_frame)
-        pm_title = QLabel("▸ POST-MORTEM LOG")
-        pm_title.setObjectName("subtitle")
-        pm_layout.addWidget(pm_title)
-
+        # Keep legacy aliases so old event handlers still work
         self.post_mortem_display = QTextEdit()
-        self.post_mortem_display.setReadOnly(True)
-        self.post_mortem_display.setStyleSheet(
-            f"background: {COLORS.get('bg_dark', '#0a0a0f')}; "
-            f"color: {COLORS.get('cyan', '#00ffff')}; "
-            f"font-family: monospace; font-size: 11px;"
-        )
-        pm_layout.addWidget(self.post_mortem_display, 1)
-        main_split.addWidget(pm_frame)
-
-        # Right: Strategy scorecards + RL rewards
-        right_frame = QFrame()
-        right_frame.setObjectName("panel")
-        right_layout = QVBoxLayout(right_frame)
-
-        rl_title = QLabel("▸ RL AGENT SCORECARDS")
-        rl_title.setObjectName("subtitle")
-        right_layout.addWidget(rl_title)
-
+        self.post_mortem_display.hide()
         self.rl_scorecard_display = QTextEdit()
-        self.rl_scorecard_display.setReadOnly(True)
-        self.rl_scorecard_display.setStyleSheet(
-            f"background: {COLORS.get('bg_dark', '#0a0a0f')}; "
-            f"color: {COLORS.get('green', '#00ff88')}; "
-            f"font-family: monospace; font-size: 11px;"
-        )
-        right_layout.addWidget(self.rl_scorecard_display, 1)
-        main_split.addWidget(right_frame)
-
-        main_split.setSizes([500, 300])
-        layout.addWidget(main_split, 1)
+        self.rl_scorecard_display.hide()
 
         return tab
 
@@ -944,7 +654,6 @@ class MainWindow(QMainWindow):
         self.bus.subscribe(EventType.OPTIMIZATION_SUGGESTION, self._on_optimization_suggestion)
         self.bus.subscribe(EventType.REGIME_CHANGE, self._on_regime_change)
         self.bus.subscribe(EventType.VOLUME_PROFILE_UPDATE, self._on_volume_profile)
-        self.bus.subscribe(EventType.FOOTPRINT_UPDATE, self._on_footprint)
         self.bus.subscribe(EventType.PRICE_UPDATE, self._on_price)
         # Phase 2
         self.bus.subscribe(EventType.DARK_POOL_ALERT, self._on_dark_pool)
@@ -1087,9 +796,16 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-        # Sound: ding on high-confidence signals
-        if conf > 0.75:
-            print("[SOUND: ding]")
+        # Sound alert on high-confidence signals (macOS native)
+        if conf > 0.75 and self.config.ui_config.sound_enabled:
+            try:
+                import subprocess
+                subprocess.Popen(
+                    ["afplay", "/System/Library/Sounds/Glass.aiff"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+            except Exception:
+                pass
 
     def _on_ensemble_update(self, event: Event):
         scores = {}
@@ -1160,6 +876,12 @@ class MainWindow(QMainWindow):
             pnl_color = COLORS['green_bright'] if pnl >= 0 else COLORS['pink']
             self._pnl_status_label.setText(f"P&L: ${pnl:+.2f}")
             self._pnl_status_label.setStyleSheet(f"color: {pnl_color}; " + _sb_base)
+
+            # Cumulative P&L
+            self._cumulative_pnl = getattr(self, '_cumulative_pnl', 0.0) + pnl
+            cum_color = COLORS['green_bright'] if self._cumulative_pnl >= 0 else COLORS['pink']
+            self._cum_pnl_label.setText(f"Σ ${self._cumulative_pnl:+.2f}")
+            self._cum_pnl_label.setStyleSheet(f"color: {cum_color}; " + _sb_base)
         except Exception:
             pass
         try:
@@ -1196,30 +918,11 @@ class MainWindow(QMainWindow):
 
     def _on_volume_profile(self, event: Event):
         profile = event.data.get("profile")
-        session_type = event.data.get("session_type")  # optional: "RTH" or "OVERNIGHT"
 
         if isinstance(profile, VolumeProfile):
             self.mini_volume_profile.set_profile(profile)
-            self.full_volume_profile.set_profile(profile)
             self.mini_delta_profile.set_profile(profile)
-            self.full_delta_profile.set_profile(profile)
 
-            # Phase 4: feed combined footprint
-            try:
-                self.footprint_cmd.set_profile(profile)
-            except Exception:
-                pass
-
-            poc = profile.poc
-            val, vah = profile.value_area()
-            self.vp_readout.setText(
-                f"POC: {poc:.2f} | VAH: {vah:.2f} | VAL: {val:.2f}"
-                if poc and vah and val else "POC: - | VAH: - | VAL: -"
-            )
-            self.cd_readout.setText(
-                f"Cumulative Delta: {profile.cumulative_delta:+,} | "
-                f"Session Volume: {profile.total_volume:,}"
-            )
             self.session_delta_label.setText(f"Delta: {profile.cumulative_delta:+,}")
             try:
                 self._delta_bar.set_delta(int(profile.cumulative_delta))
@@ -1233,37 +936,6 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-            # Phase 4: feed cumulative delta to flow indicator strip
-            try:
-                self.flow_indicators.cum_delta.add_point(float(profile.cumulative_delta))
-                if profile.total_volume > 0:
-                    ba = profile.total_delta / profile.total_volume if hasattr(profile, 'total_delta') else 0.5
-                    self.flow_indicators.ba_ratio.set_ratio(max(0, min(1, 0.5 - ba * 0.5)))
-            except Exception:
-                pass
-
-            # Push to session profile display if session is specified
-            if session_type:
-                from .session_profiles import SessionType
-                st = (SessionType.RTH if session_type == "RTH"
-                      else SessionType.OVERNIGHT)
-                try:
-                    self.session_profiles.load_volume_profile(profile, st)
-                except Exception:
-                    pass
-
-    def _on_footprint(self, event: Event):
-        bars = event.data.get("bars")
-        if bars:
-            self.footprint_chart.set_bars(bars)
-            self.advanced_footprint.set_bars(bars)
-            self.atas_footprint.set_bars(bars)
-            # Phase 4: feed combined footprint
-            try:
-                self.footprint_cmd.set_bars(bars)
-            except Exception:
-                pass
-
     def _on_price(self, event: Event):
         self._last_price_time = time.time()  # heartbeat for connection status
         price = event.data.get("price")
@@ -1273,17 +945,23 @@ class MainWindow(QMainWindow):
         is_buy = event.data.get("is_buy", True)
 
         if price:
+            self._last_price = float(price)
             self.price_label.setText(f"MES: {price:.2f}")
             sign = "+" if change >= 0 else ""
             self.change_label.setText(f"{sign}{change:.2f} ({sign}{change_pct:.2f}%)")
             color = COLORS["long_color"] if change >= 0 else COLORS["short_color"]
             self.change_label.setStyleSheet(f"font-size: 13px; color: {color};")
 
+            # Feed live price to journal form's Exit @ Market button
+            try:
+                self.enhanced_journal._entry_form.set_live_price(float(price))
+            except Exception:
+                pass
+
             # Phase 4: volatility proxy drives matrix + border glow
             try:
                 vol = min(abs(change_pct) / 0.5, 1.0)  # 0.5% move = full glow
                 self._matrix_bg.set_volatility(vol)
-                self.footprint_cmd.set_volatility(vol)
             except Exception:
                 pass
 
@@ -1296,17 +974,6 @@ class MainWindow(QMainWindow):
                 side = 'buy' if is_buy else 'sell'
                 now = time.time()
 
-                # Feed session profiles
-                self.session_profiles.add_trade(now, price, size, side)
-
-                # Feed ATAS footprint
-                bid_vol = 0 if is_buy else size
-                ask_vol = size if is_buy else 0
-                try:
-                    self.atas_footprint.add_trade(price, bid_vol, ask_vol)
-                except Exception:
-                    pass
-
                 # Feed Phase 3 big trades engine + indicator widgets
                 try:
                     trade = self._big_trades_engine.process_trade(now, price, size, side)
@@ -1314,17 +981,6 @@ class MainWindow(QMainWindow):
                         self.big_trades_indicator.add_trade(now, price, size, side)
                 except Exception:
                     pass
-
-                # Legacy big trade panel
-                try:
-                    bt = self.big_trade_panel.add_trade(price, size, is_buy)
-                except Exception:
-                    bt = None
-
-            try:
-                self.big_trade_panel.set_price(price)
-            except Exception:
-                pass
 
     # --- Phase 2 event handlers ---
 
@@ -1360,7 +1016,15 @@ class MainWindow(QMainWindow):
         self._status_label.setText(
             f"BIG TRADE: {size} lots @ {price:.2f} ({trade_type})"
         )
-        print("[SOUND: whoosh]")
+        if self.config.ui_config.sound_enabled:
+            try:
+                import subprocess
+                subprocess.Popen(
+                    ["afplay", "/System/Library/Sounds/Submarine.aiff"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+            except Exception:
+                pass
         # Update big trades widget
         self._recent_big_trades.append(event.data)
         if len(self._recent_big_trades) > 50:
@@ -1396,6 +1060,11 @@ class MainWindow(QMainWindow):
                     cursor = self.post_mortem_display.textCursor()
                     cursor.movePosition(cursor.MoveOperation.Start)
                     self.post_mortem_display.setTextCursor(cursor)
+                except Exception:
+                    pass
+                # Also push to enhanced META-AI dashboard
+                try:
+                    self.meta_ai_dashboard.add_post_mortem(narrative)
                 except Exception:
                     pass
 
@@ -1445,50 +1114,10 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-    def _pop_out_footprint(self):
-        """Pop out the footprint chart into a floating window."""
-        if self._floating_footprint is None or not self._floating_footprint.isVisible():
-            self._floating_footprint = FloatingFootprintWindow(self)
-            # Feed it the same bars
-            bars = self.advanced_footprint._bars
-            if bars:
-                self._floating_footprint.footprint.set_bars(bars)
-            self._floating_footprint.show()
-
     def _refresh_analytics(self):
-        """Load analytics data from database and refresh analytics dashboard + charts."""
+        """Load analytics data from database and refresh analytics dashboard."""
         try:
             self.analytics_panel.refresh_all()
-        except Exception:
-            pass
-
-        # Feed NeonLineCharts with trade P&L history
-        try:
-            trades = self.db.get_trades(limit=500)
-            if trades:
-                equity_pts = []
-                dd_pts = []
-                cumulative = 0.0
-                peak = 0.0
-                now_ts = time.time()
-                for i, t in enumerate(reversed(trades)):
-                    pnl = getattr(t, 'pnl', 0) or 0
-                    cumulative += pnl
-                    ts = getattr(t, 'exit_time', None) or (now_ts - (len(trades) - i) * 3600)
-                    if isinstance(ts, str):
-                        try:
-                            import datetime as _dt
-                            ts = _dt.datetime.fromisoformat(ts).timestamp()
-                        except Exception:
-                            ts = now_ts - (len(trades) - i) * 3600
-                    equity_pts.append((float(ts), cumulative))
-                    if cumulative > peak:
-                        peak = cumulative
-                    dd = cumulative - peak
-                    dd_pts.append((float(ts), dd))
-
-                self.equity_chart.set_data(equity_pts)
-                self.drawdown_chart.set_data(dd_pts)
         except Exception:
             pass
 
@@ -1504,12 +1133,17 @@ class MainWindow(QMainWindow):
     def keyPressEvent(self, event: QKeyEvent):
         """Handle key presses for Konami code, vanity dance, and other easter eggs."""
         # Vanity Konami code check
-        if self._vanity.handle_key(event.key()):
-            return
-        if self._eggs.handle_key(event.key()):
-            print("[SOUND: retro_arcade]")
-        else:
-            super().keyPressEvent(event)
+        try:
+            if self._vanity.handle_key(event.key()):
+                return
+        except Exception:
+            pass
+        try:
+            if self._eggs._handle_key(event):
+                return
+        except Exception:
+            pass
+        super().keyPressEvent(event)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -1591,6 +1225,8 @@ class MainWindow(QMainWindow):
             new_key = getattr(fresh, "anthropic_api_key", "") or key
             if hasattr(self, "_ai_chat"):
                 self._ai_chat.refresh_api_key(new_key)
+                bypass_enabled = getattr(fresh, "anthropic_bypass_mode", False)
+                self._ai_chat.set_bypass_mode(bypass_enabled)
         except Exception:
             pass
 

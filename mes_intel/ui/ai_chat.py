@@ -327,12 +327,22 @@ class AIChatPanel(QWidget):
                 pass
         if not api_key:
             api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        self._assistant = LLMAssistant(db_path=self._db_path, api_key=api_key)
+        bypass_mode = False
+        if self._config is not None:
+            bypass_mode = getattr(self._config, "anthropic_bypass_mode", False)
+        self._assistant = LLMAssistant(db_path=self._db_path, api_key=api_key, bypass_mode=bypass_mode)
 
     def refresh_api_key(self, key: str):
         """Called when user saves a new API key in settings."""
         if self._assistant:
             self._assistant.set_api_key(key)
+            if self._config is not None:
+                self._assistant.set_bypass_mode(getattr(self._config, "anthropic_bypass_mode", False))
+
+    def set_bypass_mode(self, enabled: bool):
+        """Enable or disable LLM assistant bypass mode from settings."""
+        if self._assistant:
+            self._assistant.set_bypass_mode(enabled)
 
     def _build_ui(self):
         outer = QVBoxLayout(self)

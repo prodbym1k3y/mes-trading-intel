@@ -649,9 +649,13 @@ class TradeEntryForm(QWidget):
         btn_row = QHBoxLayout()
         self._save_btn = _btn("◆ SAVE TRADE", COLORS["green_bright"], size=12)
         self._save_btn.clicked.connect(self._save_trade)
+        self._exit_market_btn = _btn("⚡ EXIT @ MARKET", COLORS["amber"], size=11)
+        self._exit_market_btn.setToolTip("Set exit price to current live price")
+        self._exit_market_btn.clicked.connect(self._exit_at_market)
         self._clear_btn = _btn("✕ CLEAR", COLORS["text_muted"])
         self._clear_btn.clicked.connect(self._clear_form)
         btn_row.addWidget(self._save_btn)
+        btn_row.addWidget(self._exit_market_btn)
         btn_row.addWidget(self._clear_btn)
         btn_row.addStretch()
         lay.addLayout(btn_row)
@@ -834,6 +838,19 @@ class TradeEntryForm(QWidget):
         self._pnl_display.setText("P&L: —")
         self._rr_display.setText("R:R — : —")
 
+    def set_live_price(self, price: float):
+        """Called by parent to update the live market price."""
+        self._live_price = price
+
+    def _exit_at_market(self):
+        """Fill exit price with the current live market price and auto-save."""
+        price = getattr(self, '_live_price', 0.0)
+        if price > 0:
+            self._exit.setText(f"{price:.2f}")
+            self._calc_pnl()
+        else:
+            self._exit.setPlaceholderText("No live price available")
+
     def load_for_edit(self, trade: dict):
         self._edit_id = trade.get("id")
         self._entry.setText(str(trade.get("entry_price", "")))
@@ -930,6 +947,11 @@ class TradeRowWidget(QFrame):
         if emotion:
             emo_c = COLORS["orange"] if emotion in ("FOMO", "Revenge") else COLORS["cyan_dim"]
             lay.addWidget(_label(emotion, 8, emo_c))
+
+        source = (t.get("source") or "manual").replace("_", " ").upper()
+        if source != "MANUAL":
+            src_color = COLORS["cyan_mid"] if "AMP" in source or "RITHMIC" in source else COLORS["amber"]
+            lay.addWidget(_label(source, 8, src_color))
 
         lay.addStretch()
 
@@ -1243,6 +1265,7 @@ class TradeDetailPanel(QWidget):
              COLORS["green_bright"] if (r or 0) > 0 else COLORS["pink"]),
             ("HOLD TIME",  f"{hold_sec/60:.0f}m" if hold_sec else "—", COLORS["text_white"]),
             ("FEES",       f"${t.get('fees', 0):.2f}",       COLORS["text_muted"]),
+            ("SOURCE",     (t.get("source") or "manual").replace("_", " ").upper(), COLORS["cyan_mid"]),
             ("STATUS",     (t.get("status") or "").upper(),  COLORS["amber"]),
         ]
         for i, (lbl, val, col) in enumerate(cells):
@@ -1872,6 +1895,9 @@ class EnhancedJournalTab(QWidget):
         self._build()
         self._load_trades()
 
+        if self._config and self._config.amp_sync.auto_sync_enabled and RITHMIC_AVAILABLE:
+            QTimer.singleShot(100, lambda: self._autosync_btn.setChecked(True))
+
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._load_trades)
         self._timer.start(30_000)
@@ -2050,6 +2076,7 @@ class EnhancedJournalTab(QWidget):
                         if self._config else "FIFO"
                     ),
                     on_progress=lambda msg: self._set_status(msg, COLORS["amber"]),
+                    bus=self._bus,
                 )
                 if count:
                     self._set_status(f"✓ Imported {count} trades", COLORS["green_bright"])
@@ -2077,6 +2104,7 @@ class EnhancedJournalTab(QWidget):
                     self._config, self._db,
                     days_back=30,
                     on_progress=lambda msg: self._set_status(msg, COLORS["cyan"]),
+                    bus=self._bus,
                 )
                 if count:
                     self._set_status(f"✓ Synced {count} trades", COLORS["green_bright"])
@@ -2103,6 +2131,7 @@ class EnhancedJournalTab(QWidget):
             self._auto_sync_manager = AutoSyncManager(
                 config=self._config,
                 db=self._db,
+                bus=self._bus,
                 interval_sec=interval,
                 on_progress=lambda msg: self._set_status(msg, COLORS["cyan"]),
             )

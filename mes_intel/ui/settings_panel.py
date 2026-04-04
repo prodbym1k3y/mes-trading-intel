@@ -250,6 +250,13 @@ class SettingsPanel(QWidget):
 
         ai_form.addRow("API Key:", self.anthropic_key)
 
+        self.anthropic_bypass = QCheckBox("Enable bypass mode")
+        self.anthropic_bypass.setToolTip(
+            "When enabled, AI assistant will skip tool-based actions and require explicit bypass confirmation."
+        )
+        self.anthropic_bypass.setStyleSheet(f"color: {_DIM}; font-size: 10px;")
+        ai_form.addRow(self.anthropic_bypass)
+
         ai_note = QLabel(
             "ℹ  Free API key at console.anthropic.com → API Keys.\n"
             "   Powers the AI ASSISTANT tab — ask questions about your trades,\n"
@@ -304,6 +311,7 @@ class SettingsPanel(QWidget):
             self.fh_key.setText(config.news.finnhub_key or "")
             self.atas_dir.setText(config.atas.csv_export_dir or "")
             self.anthropic_key.setText(getattr(config, "anthropic_api_key", "") or "")
+            self.anthropic_bypass.setChecked(getattr(config, "anthropic_bypass_mode", False))
         except Exception as exc:
             log.debug("Settings load error: %s", exc)
 
@@ -337,6 +345,7 @@ class SettingsPanel(QWidget):
             existing["atas"]["csv_export_dir"] = self.atas_dir.text().strip()
 
             existing["anthropic_api_key"] = self.anthropic_key.text().strip()
+            existing["anthropic_bypass_mode"] = self.anthropic_bypass.isChecked()
 
             config_path.parent.mkdir(parents=True, exist_ok=True)
             config_path.write_text(json.dumps(existing, indent=2))

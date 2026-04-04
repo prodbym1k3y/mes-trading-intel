@@ -62,6 +62,11 @@ strategy_weights_history, market_patterns, market_regimes, usage_analytics, agen
 - Database: SELECT queries only — never INSERT/UPDATE/DELETE
 - Files: read-only access under ~/trading/ only
 - Focus on MES futures trading context
+
+## Risk/BYPASS Policy
+- If you think the user is about to request something that could impact privacy, security, or workflow correctness, ask for explicit bypass confirmation.
+- Use the token phrase: **BYPASS_CONFIRMATION_REQUIRED** and then explain what the action would do and why it needs approval.
+- If the user sets bypass mode on, avoid executing potentially risky non-core actions and keep responses short and safe.
 """
 
 # ── Tool definitions sent to Claude ──────────────────────────────────────────
@@ -395,12 +400,24 @@ class ToolExecutor:
 class LLMAssistant:
     """Manages conversation with Claude, tool calls, and chat history persistence."""
 
-    def __init__(self, db_path: str, api_key: str = ""):
+    def __init__(self, db_path: str, api_key: str = "", bypass_mode: bool = False):
         self.db_path = db_path
         self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         self._executor = ToolExecutor(db_path)
         self._client = None
         self._messages: list[dict] = []  # conversation history
+        self._bypass_mode = bool(bypass_mode)
+
+    def set_bypass_mode(self, enabled: bool):
+        self._bypass_mode = bool(enabled)
+
+    def get_bypass_mode(self) -> bool:
+        return self._bypass_mode
+
+    def _build_system_prompt(self) -> str:
+        if self._bypass_mode:
+            return SYSTEM_PROMPT + "\n[System status: BYPASS MODE ENABLED - avoid non-essential actions, do not execute tool calls without explicit user permission.]"
+        return SYSTEM_PROMPT + "\n[System status: BYPASS MODE DISABLED - normal operation.]"
 
     def _get_client(self):
         if self._client is None:
@@ -446,7 +463,7 @@ class LLMAssistant:
             response = client.messages.create(
                 model=MODEL,
                 max_tokens=4096,
-                system=SYSTEM_PROMPT,
+                system=self._build_system_prompt(),
                 tools=TOOLS,
                 messages=self._messages,
             )
@@ -456,6 +473,14 @@ class LLMAssistant:
                 # Process all tool calls in this response
                 assistant_content = response.content
                 self._messages.append({"role": "assistant", "content": assistant_content})
+
+                if self._bypass_mode:
+                    notice = (
+                        "BYPASS MODE ENABLED: tool calls have been skipped to preserve privacy "
+                        "and workflow safety. Disable bypass mode to execute tools."
+                    )
+                    self._messages.append({"role": "assistant", "content": notice})
+                    return notice, tool_calls_log, total_tokens
 
                 tool_results = []
                 for block in assistant_content:

@@ -143,19 +143,39 @@ class ChartMonitor:
         lows = [b.low for b in bars if b.low is not None]
         volumes = [b.volume for b in bars]
 
+        # Compute real VWAP from volume profile
+        vwap = profile.poc  # fallback
+        total_vol = profile.total_volume
+        if total_vol > 0:
+            levels = profile.sorted_levels()
+            vwap = sum(l.price * l.total_volume for l in levels) / total_vol
+
         data = {
             "prices": prices,
+            "price": prices[-1] if prices else 0.0,
+            "price_history": prices,
             "highs": highs,
             "lows": lows,
+            "high": max(highs) if highs else 0.0,
+            "low": min(lows) if lows else 0.0,
             "volumes": volumes,
+            "volume_history": volumes,
+            "volume": volumes[-1] if volumes else 0,
             "volume_profile": profile,
             "footprint_bars": bars,
             "poc": profile.poc,
             "val": profile.val,
             "vah": profile.vah,
+            "vwap": vwap,
             "cumulative_delta": profile.cumulative_delta,
+            "session_delta": profile.cumulative_delta,
+            "delta": bars[-1].delta if bars else 0,
+            "delta_history": [b.delta for b in bars[-100:]],
             "recent_deltas": [b.delta for b in bars[-20:]],
-            "vwap": profile.poc,  # approximation
+            "session_high": max(highs) if highs else 0.0,
+            "session_low": min(lows) if lows else 0.0,
+            "buy_volume": sum(l.ask_volume for l in profile.sorted_levels()),
+            "sell_volume": sum(l.bid_volume for l in profile.sorted_levels()),
         }
 
         # Attach cross-asset + options data if feed is available
@@ -163,7 +183,9 @@ class ChartMonitor:
         if feed is not None:
             try:
                 ca = feed.get_latest()
-                data['cross_asset'] = ca
+                data['cross_asset_prices'] = ca.get('assets', {})
+                data['cross_asset_signals'] = ca.get('assets', {})
+                data['cross_asset_composite'] = ca.get('composite_signal', 0.0)
                 data['options_data'] = ca.get('gex', {})
             except Exception:
                 pass

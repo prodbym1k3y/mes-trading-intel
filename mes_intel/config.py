@@ -81,6 +81,7 @@ class SignalConfig:
 
     # Strategy weights (auto-adjusted by meta-learner)
     weights: dict = field(default_factory=lambda: {
+        # Phase 1 — core
         "mean_reversion": 1.0,
         "momentum": 1.0,
         "stat_arb": 0.8,
@@ -88,6 +89,35 @@ class SignalConfig:
         "gex_model": 1.0,
         "hmm_regime": 0.8,
         "ml_scorer": 1.5,
+        # Phase 2 — quant
+        "TWAPDeviationStrategy": 0.8,
+        "MicrostructureStrategy": 1.0,
+        "TickMomentumStrategy": 0.9,
+        "DeltaDivergenceStrategy": 1.1,
+        "LiquiditySweepStrategy": 1.0,
+        "ORBStrategy": 1.0,
+        "VWAPBandsStrategy": 1.0,
+        "MarketInternalsStrategy": 0.8,
+        "AuctionTheoryStrategy": 1.1,
+        "IcebergDetectionStrategy": 0.9,
+        "ConfluenceZoneDetector": 1.2,
+        # Phase 3 — cross-asset + options
+        "cross_asset": 1.0,
+        "options_gamma": 1.0,
+        # Phase 5 — advanced quant
+        "volume_profile_advanced": 1.1,
+        "delta_flow": 1.2,
+        "vpin": 1.0,
+        "options_flow": 1.0,
+        "kalman_fair_value": 1.0,
+        "hurst_regime": 0.9,
+        "orderflow_imbalance": 1.2,
+        # Phase 6 — systematic models
+        "ts_momentum": 1.0,
+        "vol_targeting": 0.9,
+        "relative_value": 0.8,
+        "macro_regime": 0.9,
+        "factor_correlation": 0.8,
     })
 
     # Risk
@@ -130,7 +160,7 @@ class AmpSyncConfig:
     rithmic_server: str = "Rithmic Paper Trading"
 
     # Auto-sync
-    auto_sync_enabled: bool = False
+    auto_sync_enabled: bool = True
     auto_sync_interval: int = 30          # seconds between live syncs
 
     # CSV import
@@ -164,6 +194,7 @@ class AppConfig:
 
     # AI Assistant
     anthropic_api_key: str = ""
+    anthropic_bypass_mode: bool = False
 
     # UI
     theme: str = "retro"
@@ -227,7 +258,7 @@ class AppConfig:
             for k, v in data["amp_sync"].items():
                 if hasattr(cfg.amp_sync, k):
                     setattr(cfg.amp_sync, k, v)
-        for k in ("theme", "window_width", "window_height", "db_path", "anthropic_api_key"):
+        for k in ("theme", "window_width", "window_height", "db_path", "anthropic_api_key", "anthropic_bypass_mode"):
             if k in data:
                 setattr(cfg, k, data[k])
         return cfg

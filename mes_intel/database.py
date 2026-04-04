@@ -134,6 +134,50 @@ class Database:
         with self.conn() as c:
             c.execute("UPDATE signals SET status=? WHERE id=?", (status, signal_id))
 
+    def get_strategy_scores(self, limit: int = 500) -> dict:
+        """Get per-strategy performance aggregated from strategy_scores + trades.
+
+        Returns dict of {strategy_name: {wins, losses, win_rate, avg_score, total}}.
+        """
+        with self.conn() as c:
+            rows = c.execute("""
+                SELECT ss.strategy_name, ss.score, ss.direction,
+                       t.pnl, t.status AS trade_status
+                FROM strategy_scores ss
+                JOIN signals s ON s.id = ss.signal_id
+                LEFT JOIN trades t ON t.signal_id = s.id
+                WHERE t.status = 'closed'
+                ORDER BY s.timestamp DESC
+                LIMIT ?
+            """, (limit,)).fetchall()
+
+        scores: dict = {}
+        for row in rows:
+            name = row["strategy_name"]
+            if name not in scores:
+                scores[name] = {
+                    "wins": 0, "losses": 0, "total": 0,
+                    "sum_score": 0.0, "sum_pnl": 0.0,
+                }
+            entry = scores[name]
+            entry["total"] += 1
+            entry["sum_score"] += row["score"] or 0
+            pnl = row["pnl"] or 0
+            entry["sum_pnl"] += pnl
+            if pnl > 0:
+                entry["wins"] += 1
+            elif pnl < 0:
+                entry["losses"] += 1
+
+        # Compute derived metrics
+        for name, d in scores.items():
+            total = d["total"]
+            d["win_rate"] = d["wins"] / total if total > 0 else 0
+            d["avg_score"] = d["sum_score"] / total if total > 0 else 0
+            d["avg_pnl"] = d["sum_pnl"] / total if total > 0 else 0
+
+        return scores
+
     # --- Trades ---
 
     def insert_trade(self, trade: dict) -> int:

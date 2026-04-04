@@ -109,9 +109,9 @@ class _HeuristicScorer:
         return np.array([])
 
 
-# ── ModelTrainer ──────────────────────────────────────────────────────────────
+# ── MLTrainer ────────────────────────────────────────────────────────────────
 
-class ModelTrainer:
+class MLTrainer:
     """Train an XGBoost classifier on historical trade data.
 
     Args:

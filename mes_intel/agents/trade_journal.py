@@ -459,8 +459,40 @@ class TradeJournal:
         ))
 
     def _on_signal(self, event: Event):
-        """Handle new signals — don't auto-trade, just log for reference."""
-        log.debug("Signal received: %s", event.data)
+        """Auto-create draft trade entry from high-confidence signals."""
+        d = event.data
+        direction = d.get("direction", "FLAT")
+        confidence = d.get("confidence", 0)
+        entry_price = d.get("entry") or d.get("entry_price")
+        signal_id = d.get("signal_id")
+
+        if direction == "FLAT" or not entry_price:
+            return
+
+        # Only auto-create for signals above min_confidence
+        if confidence < 0.5:
+            return
+
+        try:
+            trade = TradeRecord(
+                signal_id=signal_id,
+                direction=direction,
+                entry_price=float(entry_price),
+                stop_price=d.get("stop"),
+                target_price=d.get("target"),
+                quantity=1,
+                source="auto_signal",
+                status="open",
+                notes=f"Auto from signal #{signal_id} "
+                      f"(conf={confidence:.0%}, regime={d.get('regime', '?')})",
+            )
+            trade_id = self.open_trade(trade)
+            log.info(
+                "Auto-created trade #%d from signal: %s @ %.2f",
+                trade_id, direction, entry_price,
+            )
+        except Exception:
+            log.debug("Signal received (no auto-trade): %s", d)
 
     def _on_lesson_learned(self, event: Event):
         """Receive a lesson from meta-learner and persist it."""

@@ -26,6 +26,8 @@ from datetime import datetime, date
 from pathlib import Path
 from typing import Callable, List, Optional
 
+from ..event_bus import Event, EventType
+
 log = logging.getLogger(__name__)
 
 # Try importing rapi — same pattern as rithmic_feed.py
@@ -507,7 +509,7 @@ def auto_grade(trip: RoundTrip) -> dict:
 #  Database insertion
 # ─────────────────────────────────────────────────────────────────────────────
 
-def store_trades(trips: list[RoundTrip], db, skip_duplicates: bool = True) -> int:
+def store_trades(trips: list[RoundTrip], db, skip_duplicates: bool = True, bus=None) -> int:
     """Insert matched round-trips into the trades table.
 
     Grades each trade and inserts a trade_grades record.
@@ -559,6 +561,22 @@ def store_trades(trips: list[RoundTrip], db, skip_duplicates: bool = True) -> in
         except Exception as exc:
             log.debug("amp_sync: could not insert grade for trade %d — %s", trade_id, exc)
 
+        if bus is not None:
+            try:
+                bus.publish(Event(
+                    type=EventType.TRADE_CLOSED,
+                    source="amp_sync",
+                    data={
+                        "trade_id": trade_id,
+                        "pnl": trip.pnl,
+                        "r_multiple": trip.r_multiple,
+                        "grade": grade_dict.get("notes"),
+                        "overall_score": grade_dict.get("overall_grade", 0.0),
+                    },
+                ))
+            except Exception:
+                log.exception("amp_sync: failed to publish TRADE_CLOSED for trade %d", trade_id)
+
         existing_keys.add(key)
         inserted += 1
         log.info("amp_sync: imported trade #%d  %s %s %.2f→%.2f  P&L=$%.2f",
@@ -578,6 +596,7 @@ def import_from_csv(
     db,
     match_method: str = "FIFO",
     on_progress: Optional[Callable[[str], None]] = None,
+    bus=None,
 ) -> int:
     """Parse an AMP/Rithmic CSV export and insert trades into the DB.
 
@@ -617,7 +636,7 @@ def import_from_csv(
         return 0
 
     _emit("Grading and inserting …")
-    inserted = store_trades(trips, db)
+    inserted = store_trades(trips, db, bus=bus)
     _emit(f"Done — imported {inserted} new trades")
     return inserted
 
@@ -636,9 +655,10 @@ class RithmicOrderHistoryFetcher:
     This implementation follows AMP Futures' rapi setup guide.
     """
 
-    def __init__(self, config, db, on_progress=None):
+    def __init__(self, config, db, on_progress=None, bus=None):
         self._config  = config
         self._db      = db
+        self._bus     = bus
         self._on_progress = on_progress
         self._fills: list[Fill] = []
         self._done  = threading.Event()
@@ -707,7 +727,7 @@ class RithmicOrderHistoryFetcher:
 
         self._emit(f"Received {len(self._fills)} fills, matching trades …")
         trips = match_fills(self._fills)
-        inserted = store_trades(trips, self._db)
+        inserted = store_trades(trips, self._db, bus=self._bus)
         self._emit(f"Imported {inserted} new trades from Rithmic")
         return inserted
 
@@ -755,9 +775,9 @@ class RithmicOrderHistoryFetcher:
             log.debug("amp_sync: fill_received error — %s", exc)
 
 
-def rithmic_sync(config, db, days_back: int = 30, on_progress=None) -> int:
+def rithmic_sync(config, db, days_back: int = 30, on_progress=None, bus=None) -> int:
     """Convenience wrapper: fetch Rithmic history and import."""
-    fetcher = RithmicOrderHistoryFetcher(config, db, on_progress=on_progress)
+    fetcher = RithmicOrderHistoryFetcher(config, db, on_progress=on_progress, bus=bus)
     return fetcher.fetch(days_back=days_back)
 
 
@@ -768,9 +788,10 @@ def rithmic_sync(config, db, days_back: int = 30, on_progress=None) -> int:
 class AutoSyncManager:
     """Runs rithmic_sync() on a fixed interval in a background thread."""
 
-    def __init__(self, config, db, interval_sec: int = 30, on_progress=None):
+    def __init__(self, config, db, bus=None, interval_sec: int = 30, on_progress=None):
         self._config       = config
         self._db           = db
+        self._bus          = bus
         self._interval     = interval_sec
         self._on_progress  = on_progress
         self._running      = False
@@ -806,7 +827,8 @@ class AutoSyncManager:
         while self._running:
             try:
                 rithmic_sync(self._config, self._db, days_back=1,
-                             on_progress=self._on_progress)
+                             on_progress=self._on_progress,
+                             bus=self._bus)
             except Exception:
                 log.exception("amp_sync: auto-sync error")
             # Sleep in small chunks so stop() is responsive

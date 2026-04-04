@@ -649,6 +649,12 @@ class MetaLearner:
                     pre_metric=current_weight,
                 )
 
+        # Apply performance decay: penalize strategies with declining accuracy
+        self._apply_performance_decay(weights, adjustments)
+
+        # Regime-specific suppression: auto-dampen strategies that lose in this regime
+        self._regime_suppress(weights, adjustments, regime)
+
         if adjustments:
             self.meta_metrics["weight_adjustments"] += 1
             self.bus.publish(Event(
@@ -658,6 +664,115 @@ class MetaLearner:
             ))
             log.info("RL weight adjustments: %s",
                      {k: f"{v:.3f}" for k, v in adjustments.items()})
+
+        # Persist trade pattern for cross-session learning
+        self._record_trade_pattern(outcome, regime)
+
+    def _apply_performance_decay(self, weights: dict, adjustments: dict):
+        """Decay strategy weights that have declining recent accuracy.
+
+        Strategies that worked last week might not work now. Apply a small
+        penalty to strategies whose recent accuracy is dropping.
+        """
+        for name, tracker in self.trackers.items():
+            if name not in weights or len(tracker.recent_correct) < 20:
+                continue
+
+            # Compare last 10 trades vs prior 10
+            recent_10 = tracker.recent_correct[-10:]
+            prior_10 = tracker.recent_correct[-20:-10]
+
+            recent_acc = sum(recent_10) / len(recent_10) if recent_10 else 0.5
+            prior_acc = sum(prior_10) / len(prior_10) if prior_10 else 0.5
+
+            # If accuracy dropped significantly, apply decay
+            if recent_acc < prior_acc - 0.15:
+                decay = max(0.95, 1.0 - (prior_acc - recent_acc) * 0.3)
+                old_w = weights[name]
+                new_w = float(np.clip(old_w * decay, self.MIN_WEIGHT, self.MAX_WEIGHT))
+                if abs(new_w - old_w) > 0.001:
+                    weights[name] = new_w
+                    adjustments[name] = new_w
+                    log.info("Decay %s: %.3f → %.3f (acc dropped %.1f%% → %.1f%%)",
+                             name, old_w, new_w, prior_acc * 100, recent_acc * 100)
+
+    def _regime_suppress(self, weights: dict, adjustments: dict, regime: str):
+        """Auto-suppress strategies that consistently lose in the current regime.
+
+        If a strategy has <35% win rate in a regime over 10+ trades, dampen
+        its weight by 30% for that regime's duration.
+        """
+        for name, tracker in self.trackers.items():
+            if name not in weights:
+                continue
+
+            rp = tracker.regime_performance.get(regime, {})
+            wins = rp.get("wins", 0)
+            losses = rp.get("losses", 0)
+            total = wins + losses
+
+            if total < 10:
+                continue  # not enough data
+
+            regime_wr = wins / total
+            if regime_wr < 0.35:
+                old_w = weights[name]
+                suppressed = float(np.clip(old_w * 0.7, self.MIN_WEIGHT, self.MAX_WEIGHT))
+                if suppressed < old_w:
+                    weights[name] = suppressed
+                    adjustments[name] = suppressed
+                    log.info("Regime suppress %s in %s: %.3f → %.3f (WR=%.0f%% over %d trades)",
+                             name, regime, old_w, suppressed, regime_wr * 100, total)
+
+    def _record_trade_pattern(self, outcome: str, regime: str):
+        """Persist recurring trade patterns for cross-session learning.
+
+        Tracks which time-of-day, regime, and strategy combinations produce
+        winners vs losers. This data survives app restarts.
+        """
+        from datetime import datetime
+        now = datetime.now()
+        hour = now.hour
+        dow = now.strftime("%A")
+
+        # Build pattern fingerprint
+        active_strategies = [
+            name for name, t in self.trackers.items()
+            if t.recent_correct and t.recent_correct[-1]
+        ]
+
+        pattern_key = f"{regime}_{dow}_{hour:02d}"
+        try:
+            existing = self.db.get_agent_knowledge(
+                "meta_learner", knowledge_type="trade_pattern"
+            )
+            pattern = None
+            for r in existing:
+                if r["key"] == pattern_key:
+                    pattern = r.get("value", {})
+                    break
+
+            if pattern is None:
+                pattern = {"wins": 0, "losses": 0, "strategies": {}}
+
+            if outcome == "win":
+                pattern["wins"] += 1
+            elif outcome == "loss":
+                pattern["losses"] += 1
+
+            # Track which strategies contributed
+            for s in active_strategies[:5]:
+                pattern["strategies"][s] = pattern["strategies"].get(s, 0) + 1
+
+            self.db.upsert_agent_knowledge(
+                agent_name="meta_learner",
+                knowledge_type="trade_pattern",
+                key=pattern_key,
+                value=pattern,
+                confidence=pattern["wins"] / max(pattern["wins"] + pattern["losses"], 1),
+            )
+        except Exception:
+            pass
 
     # ══════════════════════════════════════════════
     # TEACHING: Trade Journal
@@ -1746,6 +1861,117 @@ class MetaLearner:
     def get_team_iq(self) -> float:
         """Public alias for _compute_team_iq."""
         return self._compute_team_iq()
+
+    def get_pattern_insight(self, regime: str) -> dict:
+        """Query the brain's pattern memory for the current regime/time.
+
+        Returns insights like: "In trending regime on Fridays at 10am,
+        momentum and delta_flow have 75% win rate over 20 trades."
+
+        Used by SignalEngine to boost/suppress signals based on historical patterns.
+        """
+        from datetime import datetime
+        now = datetime.now()
+        hour = now.hour
+        dow = now.strftime("%A")
+        pattern_key = f"{regime}_{dow}_{hour:02d}"
+
+        insight = {
+            "pattern_key": pattern_key,
+            "regime": regime,
+            "day": dow,
+            "hour": hour,
+            "win_rate": 0.5,
+            "sample_size": 0,
+            "best_strategies": [],
+            "confidence": 0.0,
+            "recommendation": "NEUTRAL",
+        }
+
+        try:
+            records = self.db.get_agent_knowledge(
+                "meta_learner", knowledge_type="trade_pattern"
+            )
+            for r in records:
+                if r["key"] == pattern_key:
+                    v = r.get("value", {})
+                    wins = v.get("wins", 0)
+                    losses = v.get("losses", 0)
+                    total = wins + losses
+                    if total >= 5:
+                        wr = wins / total
+                        insight["win_rate"] = round(wr, 3)
+                        insight["sample_size"] = total
+                        insight["confidence"] = min(1.0, total / 30.0)
+
+                        # Sort strategies by usage count
+                        strats = v.get("strategies", {})
+                        sorted_strats = sorted(strats.items(), key=lambda x: x[1], reverse=True)
+                        insight["best_strategies"] = [s for s, _ in sorted_strats[:5]]
+
+                        if wr >= 0.60 and total >= 10:
+                            insight["recommendation"] = "BOOST"
+                        elif wr <= 0.35 and total >= 10:
+                            insight["recommendation"] = "SUPPRESS"
+                    break
+        except Exception:
+            pass
+
+        return insight
+
+    def get_strategy_brain_report(self) -> list[dict]:
+        """Generate a comprehensive brain report for all strategies.
+
+        Returns per-strategy intelligence: accuracy, regime performance,
+        decay status, weight, and learning trajectory.
+        """
+        report = []
+        weights = self.config.signals.weights
+
+        for name, tracker in self.trackers.items():
+            entry = {
+                "name": name,
+                "weight": round(weights.get(name, 1.0), 3),
+                "accuracy": round(tracker.accuracy, 3),
+                "win_rate": round(tracker.win_rate, 3),
+                "avg_reward": round(tracker.avg_reward, 3),
+                "cumulative_pnl": round(tracker.cumulative_pnl, 2),
+                "total_trades": tracker.win_count + tracker.loss_count,
+                "knowledge_score": round(tracker.knowledge_score, 2),
+                "lessons_learned": tracker.lessons_learned,
+                "momentum": round(tracker.momentum, 4),
+                "regime_performance": {},
+            }
+
+            # Per-regime breakdown
+            for regime, rp in tracker.regime_performance.items():
+                wins = rp.get("wins", 0)
+                losses = rp.get("losses", 0)
+                total = wins + losses
+                if total > 0:
+                    entry["regime_performance"][regime] = {
+                        "win_rate": round(wins / total, 3),
+                        "pnl": round(rp.get("pnl", 0), 2),
+                        "trades": total,
+                    }
+
+            # Decay status
+            if len(tracker.recent_correct) >= 20:
+                recent_10 = tracker.recent_correct[-10:]
+                prior_10 = tracker.recent_correct[-20:-10]
+                recent_acc = sum(recent_10) / len(recent_10)
+                prior_acc = sum(prior_10) / len(prior_10)
+                entry["decaying"] = recent_acc < prior_acc - 0.10
+                entry["trend"] = "improving" if recent_acc > prior_acc + 0.05 else (
+                    "decaying" if recent_acc < prior_acc - 0.10 else "stable"
+                )
+            else:
+                entry["decaying"] = False
+                entry["trend"] = "insufficient_data"
+
+            report.append(entry)
+
+        return sorted(report, key=lambda x: x["weight"], reverse=True)
 
     def _save_knowledge_to_db(self, trade_id: Optional[int] = None):
         """Persist current knowledge scores and strategy weights to SQLite."""

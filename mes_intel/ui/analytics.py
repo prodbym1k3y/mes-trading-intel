@@ -838,6 +838,675 @@ class MLPerformanceWidget(QWidget):
 # _PaintWidget — internal helper
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ─────────────────────────────────────────────────────────────────────────────
+# TradeMetricsWidget — key quant metrics panel
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TradeMetricsWidget(QWidget):
+    """Key trading metrics: Sharpe, Sortino, profit factor, VaR, ES, win rate."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._metrics: dict[str, str] = {}
+        self._rolling_7: dict[str, str] = {}
+        self._rolling_30: dict[str, str] = {}
+        self._rolling_90: dict[str, str] = {}
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(4, 4, 4, 4)
+        root.setSpacing(8)
+
+        hdr = QLabel("KEY PERFORMANCE METRICS")
+        hdr.setStyleSheet(f"color: {CYAN}; font-size: 11px; font-weight: bold;")
+        root.addWidget(hdr)
+
+        # Top grid: main metrics
+        self._grid = QGridLayout()
+        self._grid.setSpacing(6)
+        self._metric_vals: dict[str, QLabel] = {}
+
+        METRIC_DEFS = [
+            ("sharpe",         "SHARPE RATIO",    CYAN),
+            ("sortino",        "SORTINO RATIO",   GREEN),
+            ("profit_factor",  "PROFIT FACTOR",   AMBER),
+            ("win_rate",       "WIN RATE",         GREEN),
+            ("avg_win",        "AVG WIN ($)",     GREEN),
+            ("avg_loss",       "AVG LOSS ($)",    RED),
+            ("max_dd",         "MAX DRAWDOWN",    RED),
+            ("max_dd_pct",     "MAX DD %",        RED),
+            ("var_95",         "VaR 95% ($)",     MAGENTA),
+            ("cvar_95",        "CVaR/ES 95% ($)", MAGENTA),
+            ("trade_count",    "TOTAL TRADES",    DIM),
+            ("expectancy",     "EXPECTANCY ($)",  AMBER),
+        ]
+
+        for i, (key, label, color) in enumerate(METRIC_DEFS):
+            frame = QFrame()
+            frame.setStyleSheet(
+                f"background: {BG_PANEL}; border: 1px solid {BORDER}; "
+                f"border-left: 3px solid {color};"
+            )
+            fl = QVBoxLayout(frame)
+            fl.setContentsMargins(8, 4, 8, 4)
+            fl.setSpacing(1)
+
+            lbl_k = QLabel(label)
+            lbl_k.setStyleSheet(f"color: {DIM}; font-size: 8px; font-family: 'Courier New';")
+            fl.addWidget(lbl_k)
+
+            lbl_v = QLabel("--")
+            lbl_v.setStyleSheet(
+                f"color: {color}; font-size: 18px; font-weight: bold; "
+                f"font-family: 'Courier New';"
+            )
+            fl.addWidget(lbl_v)
+            self._metric_vals[key] = lbl_v
+
+            self._grid.addWidget(frame, i // 4, i % 4)
+
+        root.addLayout(self._grid)
+
+        # Rolling metrics section
+        roll_hdr = QLabel("ROLLING PERFORMANCE")
+        roll_hdr.setStyleSheet(f"color: {AMBER}; font-size: 10px; font-weight: bold;")
+        root.addWidget(roll_hdr)
+
+        roll_grid = QGridLayout()
+        roll_grid.setSpacing(4)
+
+        periods = [("7D", self._rolling_7), ("30D", self._rolling_30), ("90D", self._rolling_90)]
+        self._roll_labels: dict[str, dict[str, QLabel]] = {}
+
+        for col, (period, _) in enumerate(periods):
+            col_lbl = QLabel(f"  {period}")
+            col_lbl.setStyleSheet(f"color: {CYAN}; font-size: 10px; font-weight: bold; font-family: 'Courier New';")
+            roll_grid.addWidget(col_lbl, 0, col + 1)
+            self._roll_labels[period] = {}
+
+        roll_metrics = [
+            ("pnl",    "P&L"),
+            ("wr",     "WIN RATE"),
+            ("trades", "TRADES"),
+            ("pf",     "P-FACTOR"),
+        ]
+
+        for row, (key, label) in enumerate(roll_metrics):
+            lbl = QLabel(label)
+            lbl.setStyleSheet(f"color: {DIM}; font-size: 8px; font-family: 'Courier New';")
+            roll_grid.addWidget(lbl, row + 1, 0)
+
+            for col, (period, _) in enumerate(periods):
+                v = QLabel("--")
+                v.setStyleSheet(f"color: {WHITE}; font-size: 9px; font-family: 'Courier New'; font-weight: bold;")
+                roll_grid.addWidget(v, row + 1, col + 1)
+                self._roll_labels[period][key] = v
+
+        root.addLayout(roll_grid)
+        root.addStretch()
+
+    def update_trades(self, trades: list):
+        if not trades:
+            return
+
+        pnls = [_get_pnl(t) for t in trades]
+        if not pnls:
+            return
+
+        import statistics
+
+        wins = [p for p in pnls if p > 0]
+        losses = [p for p in pnls if p < 0]
+        n = len(pnls)
+        n_win = len(wins)
+        n_loss = len(losses)
+
+        win_rate = n_win / n if n > 0 else 0
+        avg_win  = sum(wins) / n_win if wins else 0
+        avg_loss = sum(losses) / n_loss if losses else 0
+        gross_profit = sum(wins)
+        gross_loss   = abs(sum(losses))
+        profit_factor = gross_profit / max(gross_loss, 0.01)
+        expectancy = sum(pnls) / n if n else 0
+        total_pnl = sum(pnls)
+
+        # Drawdown
+        cum, hwm, max_dd, max_dd_pct = 0.0, 0.0, 0.0, 0.0
+        for p in pnls:
+            cum += p
+            hwm = max(hwm, cum)
+            dd = hwm - cum
+            max_dd = max(max_dd, dd)
+            if hwm > 0:
+                max_dd_pct = max(max_dd_pct, dd / hwm * 100)
+
+        # Sharpe / Sortino — use empyrical if available, else manual calc
+        try:
+            import empyrical
+            import numpy as _np
+            returns = _np.array(pnls) / max(abs(sum(pnls)), 1.0)
+            sharpe = float(empyrical.sharpe_ratio(returns, period='daily'))
+            sortino = float(empyrical.sortino_ratio(returns, period='daily'))
+            if _np.isnan(sharpe):
+                sharpe = 0.0
+            if _np.isnan(sortino):
+                sortino = 0.0
+        except Exception:
+            if len(pnls) >= 3:
+                mean = statistics.mean(pnls)
+                stdev = statistics.stdev(pnls) if len(pnls) > 1 else 1.0
+                downside_returns = [p for p in pnls if p < 0]
+                downside_std = statistics.stdev(downside_returns) if len(downside_returns) > 1 else stdev
+                ann_factor = math.sqrt(252)
+                sharpe  = (mean / max(stdev, 0.001)) * ann_factor
+                sortino = (mean / max(downside_std, 0.001)) * ann_factor
+            else:
+                sharpe = sortino = 0.0
+
+        # VaR / CVaR (historical, 95%)
+        sorted_pnls = sorted(pnls)
+        var_idx = max(0, int(len(sorted_pnls) * 0.05) - 1)
+        var_95 = sorted_pnls[var_idx] if sorted_pnls else 0.0
+        cvar_95 = sum(sorted_pnls[:var_idx + 1]) / (var_idx + 1) if var_idx >= 0 else var_95
+
+        def _fmt(v, fmt=".2f", prefix=""):
+            return f"{prefix}{v:{fmt}}"
+
+        wr_color = GREEN if win_rate >= 0.5 else RED
+        pf_color = GREEN if profit_factor >= 1.0 else RED
+        sh_color = GREEN if sharpe >= 0.5 else (RED if sharpe < 0 else AMBER)
+
+        self._metric_vals["sharpe"].setText(f"{sharpe:.2f}")
+        self._metric_vals["sharpe"].setStyleSheet(
+            f"color: {sh_color}; font-size: 18px; font-weight: bold; font-family: 'Courier New';"
+        )
+        self._metric_vals["sortino"].setText(f"{sortino:.2f}")
+        self._metric_vals["profit_factor"].setText(f"{profit_factor:.2f}")
+        self._metric_vals["profit_factor"].setStyleSheet(
+            f"color: {pf_color}; font-size: 18px; font-weight: bold; font-family: 'Courier New';"
+        )
+        self._metric_vals["win_rate"].setText(f"{win_rate * 100:.1f}%")
+        self._metric_vals["win_rate"].setStyleSheet(
+            f"color: {wr_color}; font-size: 18px; font-weight: bold; font-family: 'Courier New';"
+        )
+        self._metric_vals["avg_win"].setText(f"${avg_win:.2f}")
+        self._metric_vals["avg_loss"].setText(f"${avg_loss:.2f}")
+        self._metric_vals["max_dd"].setText(f"${max_dd:.2f}")
+        self._metric_vals["max_dd_pct"].setText(f"{max_dd_pct:.1f}%")
+        self._metric_vals["var_95"].setText(f"${var_95:.2f}")
+        self._metric_vals["cvar_95"].setText(f"${cvar_95:.2f}")
+        self._metric_vals["trade_count"].setText(str(n))
+        self._metric_vals["expectancy"].setText(f"${expectancy:.2f}")
+        exp_col = GREEN if expectancy > 0 else RED
+        self._metric_vals["expectancy"].setStyleSheet(
+            f"color: {exp_col}; font-size: 18px; font-weight: bold; font-family: 'Courier New';"
+        )
+
+        # Rolling periods
+        from datetime import datetime, timedelta
+        now = datetime.utcnow()
+
+        for days, period in [(7, "7D"), (30, "30D"), (90, "90D")]:
+            cutoff = now - timedelta(days=days)
+            period_trades = []
+            for t in trades:
+                ts_str = _get_attr(t, "entry_time") or _get_attr(t, "timestamp") or ""
+                try:
+                    ts = datetime.fromisoformat(str(ts_str)[:19])
+                    if ts >= cutoff:
+                        period_trades.append(t)
+                except Exception:
+                    pass
+
+            if period_trades:
+                ppnls = [_get_pnl(t) for t in period_trades]
+                p_wins = [p for p in ppnls if p > 0]
+                p_losses = [p for p in ppnls if p < 0]
+                p_wr = len(p_wins) / len(ppnls) if ppnls else 0
+                p_pf = sum(p_wins) / max(abs(sum(p_losses)), 0.01) if p_losses else (9.9 if p_wins else 0)
+
+                wr_c = GREEN if p_wr >= 0.5 else RED
+                pnl_c = GREEN if sum(ppnls) >= 0 else RED
+
+                self._roll_labels[period]["pnl"].setText(f"${sum(ppnls):.0f}")
+                self._roll_labels[period]["pnl"].setStyleSheet(
+                    f"color: {pnl_c}; font-size: 9px; font-family: 'Courier New'; font-weight: bold;"
+                )
+                self._roll_labels[period]["wr"].setText(f"{p_wr * 100:.0f}%")
+                self._roll_labels[period]["wr"].setStyleSheet(
+                    f"color: {wr_c}; font-size: 9px; font-family: 'Courier New'; font-weight: bold;"
+                )
+                self._roll_labels[period]["trades"].setText(str(len(ppnls)))
+                self._roll_labels[period]["pf"].setText(f"{min(p_pf, 9.9):.1f}")
+            else:
+                for k in ("pnl", "wr", "trades", "pf"):
+                    self._roll_labels[period][k].setText("--")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WinRateBreakdownWidget
+# ─────────────────────────────────────────────────────────────────────────────
+
+class WinRateBreakdownWidget(QWidget):
+    """Win rate breakdown by time of day, day of week, regime, and setup tags."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._by_hour: dict[int, dict] = {}
+        self._by_dow: dict[str, dict] = {}
+        self._by_regime: dict[str, dict] = {}
+        self._by_tag: dict[str, dict] = {}
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(4, 4, 4, 4)
+        root.setSpacing(6)
+
+        hdr = QLabel("WIN RATE BREAKDOWN")
+        hdr.setStyleSheet(f"color: {CYAN}; font-size: 11px; font-weight: bold;")
+        root.addWidget(hdr)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+
+        # Left: hour + DOW
+        left_w = QWidget()
+        left_l = QVBoxLayout(left_w)
+        left_l.setContentsMargins(0, 0, 4, 0)
+        left_l.setSpacing(4)
+
+        hour_hdr = QLabel("BY TIME OF DAY (RTH)")
+        hour_hdr.setStyleSheet(f"color: {AMBER}; font-size: 9px; font-weight: bold;")
+        left_l.addWidget(hour_hdr)
+        self._hour_canvas = _PaintWidget(self._paint_hour, min_h=120)
+        left_l.addWidget(self._hour_canvas, 1)
+
+        dow_hdr = QLabel("BY DAY OF WEEK")
+        dow_hdr.setStyleSheet(f"color: {AMBER}; font-size: 9px; font-weight: bold;")
+        left_l.addWidget(dow_hdr)
+        self._dow_canvas = _PaintWidget(self._paint_dow, min_h=80)
+        left_l.addWidget(self._dow_canvas, 1)
+
+        splitter.addWidget(left_w)
+
+        # Right: regime + tags
+        right_w = QWidget()
+        right_l = QVBoxLayout(right_w)
+        right_l.setContentsMargins(4, 0, 0, 0)
+        right_l.setSpacing(4)
+
+        regime_hdr = QLabel("BY MARKET REGIME")
+        regime_hdr.setStyleSheet(f"color: {MAGENTA}; font-size: 9px; font-weight: bold;")
+        right_l.addWidget(regime_hdr)
+        self._regime_canvas = _PaintWidget(self._paint_regime, min_h=100)
+        right_l.addWidget(self._regime_canvas, 1)
+
+        tag_hdr = QLabel("BY SETUP TYPE / TAGS")
+        tag_hdr.setStyleSheet(f"color: {MAGENTA}; font-size: 9px; font-weight: bold;")
+        right_l.addWidget(tag_hdr)
+        self._tag_canvas = _PaintWidget(self._paint_tags, min_h=100)
+        right_l.addWidget(self._tag_canvas, 1)
+
+        splitter.addWidget(right_w)
+        splitter.setSizes([500, 500])
+        root.addWidget(splitter, 1)
+
+    def update_trades(self, trades: list):
+        by_hour: dict[int, dict] = defaultdict(lambda: {"wins": 0, "total": 0})
+        by_dow:  dict[str, dict] = defaultdict(lambda: {"wins": 0, "total": 0})
+        by_regime: dict[str, dict] = defaultdict(lambda: {"wins": 0, "total": 0})
+        by_tag:  dict[str, dict] = defaultdict(lambda: {"wins": 0, "total": 0})
+
+        dow_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+        for t in trades:
+            pnl = _get_pnl(t)
+            is_win = pnl > 0
+
+            ts_str = _get_attr(t, "entry_time") or _get_attr(t, "timestamp") or ""
+            try:
+                ts = datetime.fromisoformat(str(ts_str)[:19])
+                # Phoenix time = UTC-7
+                phx_hour = (ts.hour - 7) % 24
+                by_hour[phx_hour]["total"] += 1
+                if is_win:
+                    by_hour[phx_hour]["wins"] += 1
+
+                dow = dow_names[ts.weekday()]
+                by_dow[dow]["total"] += 1
+                if is_win:
+                    by_dow[dow]["wins"] += 1
+            except Exception:
+                pass
+
+            regime = _get_attr(t, "regime") or "unknown"
+            by_regime[regime]["total"] += 1
+            if is_win:
+                by_regime[regime]["wins"] += 1
+
+            tags_str = _get_attr(t, "tags") or ""
+            for tag in str(tags_str).split(","):
+                tag = tag.strip()
+                if tag:
+                    by_tag[tag]["total"] += 1
+                    if is_win:
+                        by_tag[tag]["wins"] += 1
+
+        self._by_hour = dict(by_hour)
+        self._by_dow = dict(by_dow)
+        self._by_regime = dict(by_regime)
+        self._by_tag = dict(by_tag)
+
+        for canvas in [self._hour_canvas, self._dow_canvas,
+                       self._regime_canvas, self._tag_canvas]:
+            canvas.update()
+
+    def _paint_bars(self, painter: QPainter, w: int, h: int,
+                    data: dict, key_fn=None):
+        """Generic horizontal bar painter for win rate data."""
+        painter.fillRect(0, 0, w, h, QColor(BG_PANEL))
+        if not data:
+            painter.setPen(QColor(DIM))
+            painter.setFont(_mono(8))
+            painter.drawText(4, h // 2, "No data")
+            return
+
+        items = sorted(data.items(), key=lambda x: x[0])
+        n = len(items)
+        bar_h = max(8, (h - 16) // n - 2)
+        ML = 52
+        MR = 48
+
+        painter.setFont(_mono(7))
+        for i, (key, stats) in enumerate(items):
+            total = stats.get("total", 0)
+            wins = stats.get("wins", 0)
+            wr = wins / total if total > 0 else 0
+
+            y = 8 + i * (bar_h + 2)
+
+            # Label
+            label = key_fn(key) if key_fn else str(key)
+            painter.setPen(QColor(DIM))
+            painter.drawText(2, y + bar_h - 2, label[:7])
+
+            # Background bar
+            painter.setPen(QColor(BORDER))
+            painter.drawRect(ML, y, w - ML - MR, bar_h)
+
+            # Win rate fill
+            bar_w = int((w - ML - MR) * wr)
+            col = GREEN if wr >= 0.6 else (AMBER if wr >= 0.45 else RED)
+            painter.fillRect(ML + 1, y + 1, max(0, bar_w - 2), bar_h - 2, QColor(col))
+
+            # Stats text
+            painter.setPen(QColor(WHITE))
+            painter.drawText(w - MR + 4, y + bar_h - 2,
+                             f"{wr * 100:.0f}% ({total})")
+
+        # 50% line
+        x50 = ML + int((w - ML - MR) * 0.5)
+        painter.setPen(QPen(QColor(DIM), 1, Qt.PenStyle.DashLine))
+        painter.drawLine(x50, 4, x50, h - 4)
+
+    def _paint_hour(self, painter: QPainter, w: int, h: int):
+        self._paint_bars(painter, w, h, self._by_hour,
+                         key_fn=lambda k: f"{k:02d}:00")
+
+    def _paint_dow(self, painter: QPainter, w: int, h: int):
+        dow_order = {"Mon": 0, "Tue": 1, "Wed": 2, "Thu": 3, "Fri": 4}
+        sorted_dow = {k: v for k, v in
+                      sorted(self._by_dow.items(),
+                             key=lambda x: dow_order.get(x[0], 9))}
+        self._paint_bars(painter, w, h, sorted_dow)
+
+    def _paint_regime(self, painter: QPainter, w: int, h: int):
+        self._paint_bars(painter, w, h, self._by_regime)
+
+    def _paint_tags(self, painter: QPainter, w: int, h: int):
+        top_tags = dict(sorted(self._by_tag.items(),
+                                key=lambda x: x[1].get("total", 0),
+                                reverse=True)[:12])
+        self._paint_bars(painter, w, h, top_tags)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PnLHistogramWidget
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PnLHistogramWidget(QWidget):
+    """Distribution histogram of P&L per trade."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._pnls: list[float] = []
+        self._bins: list[tuple[float, float, int]] = []
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(4, 4, 4, 4)
+        root.setSpacing(2)
+
+        hdr = QLabel("P&L DISTRIBUTION")
+        hdr.setStyleSheet(f"color: {CYAN}; font-size: 11px; font-weight: bold;")
+        root.addWidget(hdr)
+
+        self._canvas = _PaintWidget(self._paint, min_h=200)
+        root.addWidget(self._canvas, 1)
+
+    def update_trades(self, trades: list):
+        self._pnls = [_get_pnl(t) for t in trades if _get_pnl(t) != 0]
+        if self._pnls:
+            self._compute_bins()
+        self._canvas.update()
+
+    def _compute_bins(self):
+        n_bins = 20
+        mn, mx = min(self._pnls), max(self._pnls)
+        if mn == mx:
+            self._bins = [(mn, mx, len(self._pnls))]
+            return
+        step = (mx - mn) / n_bins
+        bins = []
+        for i in range(n_bins):
+            lo = mn + i * step
+            hi = lo + step
+            count = sum(1 for p in self._pnls if lo <= p < hi)
+            bins.append((lo, hi, count))
+        # last bin inclusive
+        if bins:
+            lo, hi, _ = bins[-1]
+            count = sum(1 for p in self._pnls if lo <= p <= hi)
+            bins[-1] = (lo, hi, count)
+        self._bins = bins
+
+    def _paint(self, painter: QPainter, w: int, h: int):
+        ML, MR, MT, MB = 50, 10, 10, 28
+        painter.fillRect(0, 0, w, h, QColor(BG_PANEL))
+
+        if not self._bins:
+            painter.setPen(QColor(DIM))
+            painter.setFont(_mono(9))
+            painter.drawText(QRectF(0, 0, w, h), Qt.AlignmentFlag.AlignCenter,
+                             "NO TRADE DATA")
+            return
+
+        cw, ch = w - ML - MR, h - MT - MB
+        max_count = max(b[2] for b in self._bins) or 1
+        n_bins = len(self._bins)
+        bin_w = cw / n_bins
+
+        zero_bin_x = None
+
+        for i, (lo, hi, count) in enumerate(self._bins):
+            bx = ML + i * bin_w
+            bh = int((count / max_count) * ch)
+            by = MT + ch - bh
+
+            # Color by positive/negative
+            col = GREEN if lo >= 0 else RED
+            mid = (lo + hi) / 2
+            if abs(mid) < abs(self._bins[1][1] - self._bins[0][1]) * 0.5:
+                col = AMBER
+
+            c = QColor(col)
+            c.setAlpha(180)
+            painter.fillRect(int(bx + 1), by, max(1, int(bin_w - 2)), bh, c)
+
+            # Border
+            painter.setPen(QPen(QColor(col), 1))
+            painter.drawRect(int(bx), by, max(1, int(bin_w - 1)), bh)
+
+            # Zero line reference
+            if lo <= 0 <= hi:
+                zero_bin_x = int(bx + bin_w * (-lo / max(hi - lo, 0.001)))
+
+        # Zero line
+        if zero_bin_x:
+            painter.setPen(QPen(QColor(WHITE), 2, Qt.PenStyle.DashLine))
+            painter.drawLine(zero_bin_x, MT, zero_bin_x, MT + ch)
+            painter.setFont(_mono(7))
+            painter.setPen(QColor(DIM))
+            painter.drawText(zero_bin_x + 3, MT + 12, "$0")
+
+        # X-axis labels
+        painter.setFont(_mono(7))
+        painter.setPen(QColor(DIM))
+        for i in range(0, n_bins + 1, max(1, n_bins // 5)):
+            if i < len(self._bins):
+                lo, _, _ = self._bins[i]
+                x = int(ML + i * bin_w)
+                painter.drawText(x - 12, h - 4, f"${lo:.0f}")
+
+        # Y-axis
+        for yi in range(3):
+            gy = MT + (yi / 2) * ch
+            painter.setPen(QPen(QColor(GRID), 1))
+            painter.drawLine(ML, int(gy), ML + cw, int(gy))
+            count_at = int(max_count * (1 - yi / 2))
+            painter.setPen(QColor(DIM))
+            painter.drawText(2, int(gy) + 4, str(count_at))
+
+        _scanlines(painter, w, h)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PnLHeatmapWidget — P&L by hour and day
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PnLHeatmapWidget(QWidget):
+    """Heatmap of average P&L by hour (columns) and day of week (rows)."""
+
+    _DOW  = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+    _HOURS = list(range(6, 21))  # 6am–8pm Phoenix (covers RTH + pre/post)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._grid: dict[tuple[int, int], dict] = {}
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(4, 4, 4, 4)
+        root.setSpacing(2)
+
+        hdr = QLabel("P&L HEATMAP  (by hour × day of week, Phoenix time)")
+        hdr.setStyleSheet(f"color: {CYAN}; font-size: 11px; font-weight: bold;")
+        root.addWidget(hdr)
+
+        self._canvas = _PaintWidget(self._paint, min_h=180)
+        root.addWidget(self._canvas, 1)
+
+        legend = QLabel("Green = profitable  |  Red = losing  |  Brighter = more significant  |  # = trade count")
+        legend.setStyleSheet(f"color: {DIM}; font-size: 8px;")
+        root.addWidget(legend)
+
+    def update_trades(self, trades: list):
+        grid: dict[tuple[int, int], dict] = defaultdict(lambda: {"pnl": 0.0, "count": 0})
+
+        for t in trades:
+            pnl = _get_pnl(t)
+            ts_str = _get_attr(t, "entry_time") or _get_attr(t, "timestamp") or ""
+            try:
+                ts = datetime.fromisoformat(str(ts_str)[:19])
+                phx_hour = (ts.hour - 7) % 24
+                dow = ts.weekday()  # 0=Mon
+                if dow < 5:
+                    grid[(dow, phx_hour)]["pnl"] += pnl
+                    grid[(dow, phx_hour)]["count"] += 1
+            except Exception:
+                pass
+
+        self._grid = dict(grid)
+        self._canvas.update()
+
+    def _paint(self, painter: QPainter, w: int, h: int):
+        painter.fillRect(0, 0, w, h, QColor(BG_PANEL))
+        ML = 36  # day labels
+        MT = 22  # hour labels
+        MR = 4
+        MB = 4
+
+        n_hours = len(self._HOURS)
+        n_days = len(self._DOW)
+        cell_w = (w - ML - MR) / n_hours
+        cell_h = (h - MT - MB) / n_days
+
+        # Hour headers
+        painter.setPen(QColor(DIM))
+        painter.setFont(_mono(7))
+        for hi, hour in enumerate(self._HOURS):
+            cx = ML + (hi + 0.5) * cell_w
+            label = f"{hour:02d}"
+            fm = QFontMetrics(painter.font())
+            tw = fm.horizontalAdvance(label)
+            painter.drawText(int(cx - tw / 2), MT - 4, label)
+
+        # Day labels + cells
+        all_pnls = [v["pnl"] for v in self._grid.values() if v["count"] > 0]
+        max_abs = max((abs(p) for p in all_pnls), default=1.0)
+
+        for di, dow_name in enumerate(self._DOW):
+            cy = MT + di * cell_h
+
+            # Day label
+            painter.setPen(QColor(AMBER))
+            painter.setFont(_mono(8, bold=True))
+            painter.drawText(2, int(cy + cell_h / 2 + 4), dow_name)
+
+            for hi, hour in enumerate(self._HOURS):
+                cx = ML + hi * cell_w
+                key = (di, hour)
+                stats = self._grid.get(key)
+
+                if stats and stats["count"] > 0:
+                    pnl = stats["pnl"]
+                    count = stats["count"]
+                    intensity = min(abs(pnl) / max(max_abs, 0.01), 1.0)
+
+                    if pnl > 0:
+                        c = QColor(GREEN)
+                    else:
+                        c = QColor(RED)
+                    c.setAlpha(int(40 + intensity * 180))
+                    painter.fillRect(int(cx), int(cy), int(cell_w - 1), int(cell_h - 1), c)
+
+                    # Count text
+                    painter.setPen(QColor(WHITE) if intensity > 0.4 else QColor(DIM))
+                    painter.setFont(_mono(6))
+                    painter.drawText(int(cx + 2), int(cy + cell_h - 4), str(count))
+                else:
+                    # Empty cell
+                    c = QColor(BORDER)
+                    c.setAlpha(40)
+                    painter.fillRect(int(cx), int(cy), int(cell_w - 1), int(cell_h - 1), c)
+
+        # Grid lines
+        painter.setPen(QPen(QColor(BORDER), 1))
+        for hi in range(n_hours + 1):
+            x = int(ML + hi * cell_w)
+            painter.drawLine(x, MT, x, MT + int(n_days * cell_h))
+        for di in range(n_days + 1):
+            y = int(MT + di * cell_h)
+            painter.drawLine(ML, y, ML + int(n_hours * cell_w), y)
+
+        _scanlines(painter, w, h)
+
+
 class _PaintWidget(QWidget):
     """Generic widget that delegates paintEvent to a callable."""
 
@@ -931,6 +1600,37 @@ class AnalyticsDashboard(QWidget):
         corr_scroll.setWidget(self.correlation)
         self._tabs.addTab(corr_scroll, "CORRELATIONS")
 
+        # METRICS tab — Sharpe, Sortino, VaR, rolling, profit factor
+        metrics_scroll = QScrollArea()
+        metrics_scroll.setWidgetResizable(True)
+        self.trade_metrics = TradeMetricsWidget()
+        metrics_scroll.setWidget(self.trade_metrics)
+        self._tabs.addTab(metrics_scroll, "METRICS")
+
+        # BREAKDOWN tab — win rate by hour/DOW/regime/tag
+        breakdown_w = QWidget()
+        breakdown_l = QVBoxLayout(breakdown_w)
+        breakdown_l.setContentsMargins(4, 4, 4, 4)
+        self.win_rate_breakdown = WinRateBreakdownWidget()
+        breakdown_l.addWidget(self.win_rate_breakdown)
+        self._tabs.addTab(breakdown_w, "BREAKDOWN")
+
+        # HISTOGRAM tab — P&L distribution
+        hist_w = QWidget()
+        hist_l = QVBoxLayout(hist_w)
+        hist_l.setContentsMargins(4, 4, 4, 4)
+        self.pnl_histogram = PnLHistogramWidget()
+        hist_l.addWidget(self.pnl_histogram)
+        self._tabs.addTab(hist_w, "HISTOGRAM")
+
+        # HEATMAP tab — P&L by hour × day
+        heatmap_w = QWidget()
+        heatmap_l = QVBoxLayout(heatmap_w)
+        heatmap_l.setContentsMargins(4, 4, 4, 4)
+        self.pnl_heatmap = PnLHeatmapWidget()
+        heatmap_l.addWidget(self.pnl_heatmap)
+        self._tabs.addTab(heatmap_w, "HEATMAP")
+
         # Event bus subscriptions
         bus.subscribe(EventType.TRADE_CLOSED,       self._on_trade_closed)
         bus.subscribe(EventType.WEIGHT_ADJUSTMENT,  self._on_weight_adj)
@@ -973,6 +1673,11 @@ class AnalyticsDashboard(QWidget):
             self.equity_curve.update_data(trades)
             self.drawdown.update_data(trades)
             self.correlation.update_data(trades)
+            # New analytics tabs
+            self.trade_metrics.update_trades(trades)
+            self.win_rate_breakdown.update_trades(trades)
+            self.pnl_histogram.update_trades(trades)
+            self.pnl_heatmap.update_trades(trades)
 
             if hasattr(self._db, 'get_strategy_scores'):
                 scores = self._db.get_strategy_scores()

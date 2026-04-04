@@ -351,7 +351,37 @@ class NewsScanner:
     # ------------------------------------------------------------------
 
     def _score_sentiment(self, text: str) -> float:
-        """Keyword-based sentiment scoring. Returns -1 to +1."""
+        """Score sentiment using FinBERT (ML) with keyword fallback. Returns -1 to +1."""
+        # Try FinBERT first (much more accurate for financial text)
+        if not hasattr(self, '_finbert'):
+            self._finbert = None
+            self._finbert_tokenizer = None
+            try:
+                from transformers import AutoTokenizer, AutoModelForSequenceClassification
+                import torch
+                self._finbert_tokenizer = AutoTokenizer.from_pretrained("ProsusAI/finbert")
+                self._finbert = AutoModelForSequenceClassification.from_pretrained("ProsusAI/finbert")
+                self._finbert.eval()
+                log.info("FinBERT loaded for ML-based sentiment scoring")
+            except Exception:
+                log.debug("FinBERT not available — using keyword sentiment")
+
+        if self._finbert is not None and self._finbert_tokenizer is not None:
+            try:
+                import torch
+                inputs = self._finbert_tokenizer(text, return_tensors="pt",
+                                                  truncation=True, max_length=128)
+                with torch.no_grad():
+                    outputs = self._finbert(**inputs)
+                probs = torch.nn.functional.softmax(outputs.logits, dim=-1)[0]
+                # FinBERT labels: positive=0, negative=1, neutral=2
+                pos_prob = float(probs[0])
+                neg_prob = float(probs[1])
+                return round(pos_prob - neg_prob, 4)  # -1 to +1
+            except Exception:
+                pass  # fall through to keyword method
+
+        # Keyword fallback
         words = set(re.findall(r'\w+', text))
         pos = len(words & POSITIVE_WORDS)
         neg = len(words & NEGATIVE_WORDS)

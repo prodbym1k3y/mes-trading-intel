@@ -30,7 +30,7 @@ mes_intel/
 ├── data/              # Data feeds (Rithmic, ATAS, Alpaca, cross-asset)
 ├── engines/           # Advanced order flow + big trades engines
 ├── ml/                # scikit-learn/XGBoost trainer, features, validator
-├── strategies/        # 25 quantitative trading strategies
+├── strategies/        # 35 quantitative trading strategies
 └── ui/                # PySide6 tabs, widgets, theme, animations
 ```
 
@@ -45,16 +45,18 @@ mes_intel/
 8. **AppOptimizer** (`app_optimizer.py`) — learns user behavior, suggests UI optimizations
 
 ## UI Tabs (`mes_intel/ui/`)
-`SIGNALS | FOOTPRINT | BIG TRADES | JOURNAL | META-AI | CHARTS | ANALYTICS | INTEL | AI ASSISTANT | SETTINGS`
+`SIGNALS | BIG TRADES | JOURNAL | META-AI | ANALYTICS | INTEL | AI ASSISTANT | SETTINGS`
 
 Key files:
 - `app.py` — `MainWindow`: top-level Qt window, tab setup, agent wiring
 - `theme.py` — `COLORS`, `STYLESHEET`: cyberpunk neon palette
 - `widgets.py` — Shared neon widgets (`NeonLineChart`, `NeonButton`, etc.)
-- `signals_enhanced.py`, `journal_enhanced.py`, `charts_enhanced.py`, etc. — individual tabs
+- `signals_enhanced.py`, `journal_enhanced.py`, etc. — individual tabs
 
 ## Strategies (`mes_intel/strategies/`)
-25 strategies all inherit from `base.Strategy` and return `StrategyResult`. Registered on `SignalEngine.strategies` dict at startup in `main.py`.
+35 strategies all inherit from `base.Strategy` and return `StrategyResult`. Registered on `SignalEngine.strategies` dict at startup in `main.py`.
+- Phase 5 quant: volume_profile_advanced, delta_flow, vpin, options_flow, kalman_fair_value, hurst_regime, orderflow_imbalance
+- Phase 6 systematic: ts_momentum, vol_targeting, relative_value, macro_regime, factor_correlation
 
 ## Key Constants
 - MES tick: 0.25 points = $1.25 (not $5 — $5 is per full point)

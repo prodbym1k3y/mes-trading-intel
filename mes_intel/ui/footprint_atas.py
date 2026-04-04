@@ -332,6 +332,8 @@ class ATASCanvas(QWidget):
     STACK_BID_RATIO  = 1.5
     STACK_MIN_LEVELS = 3
 
+    CLUSTER_H = 80   # pixels reserved at bottom for cluster heatmap bar
+
     # Profile view modes
     PROFILE_MODES = ['RTH VOL', 'RTH Δ', 'ON VOL', 'ON Δ', 'ALL']
 
@@ -359,6 +361,7 @@ class ATASCanvas(QWidget):
 
         self._mouse_x: int = 0
         self._mouse_y: int = 0
+        self._hover_candle_idx: Optional[int] = None
 
         self._drag_start:  Optional[Tuple[float, float]] = None
         self._drag_price0: float = 0.0
@@ -431,11 +434,12 @@ class ATASCanvas(QWidget):
         lo -= price_range * 0.10
         hi += price_range * 0.10
         price_range = hi - lo
-        # Set row_h so all candle prices fit in the canvas height
+        # Set row_h so all candle prices fit in the chart height (excluding cluster bar)
         n_ticks = price_range / TICK
+        h_chart = h - self.CLUSTER_H
         if n_ticks > 0:
             self._row_h = max(self.MIN_ROW_H,
-                              min(self.MAX_ROW_H, h / n_ticks))
+                              min(self.MAX_ROW_H, h_chart / n_ticks))
         # Center on the midpoint of visible candle prices
         mid = (lo + hi) / 2
         self._price_offset = (mid - self._current_price) / TICK
@@ -455,9 +459,9 @@ class ATASCanvas(QWidget):
         hi += price_range * 0.10
         price_range = hi - lo
         n_ticks = price_range / TICK
-        h = self.height()
-        if n_ticks > 0 and h > 0:
-            self._row_h = max(self.MIN_ROW_H, min(self.MAX_ROW_H, h / n_ticks))
+        h_chart = self.height() - self.CLUSTER_H
+        if n_ticks > 0 and h_chart > 0:
+            self._row_h = max(self.MIN_ROW_H, min(self.MAX_ROW_H, h_chart / n_ticks))
         mid = (lo + hi) / 2
         self._price_offset = (mid - self._current_price) / TICK
 
@@ -503,20 +507,20 @@ class ATASCanvas(QWidget):
 
     # ── coordinate helpers ────────────────────────────────
     def _visible_price_range(self) -> Tuple[float, float]:
-        h = self.height()
+        h = self.height() - self.CLUSTER_H
         n_ticks  = h / self._row_h
         mid      = self._current_price + self._price_offset * TICK
         return mid - (n_ticks / 2) * TICK, mid + (n_ticks / 2) * TICK
 
     def _price_to_y(self, price: float) -> float:
-        h = self.height()
+        h = self.height() - self.CLUSTER_H
         pmin, pmax = self._visible_price_range()
         if pmax == pmin:
             return h / 2
         return h - (price - pmin) / (pmax - pmin) * h
 
     def _y_to_price(self, y: float) -> float:
-        h = self.height()
+        h = self.height() - self.CLUSTER_H
         pmin, pmax = self._visible_price_range()
         return pmin + (h - y) / h * (pmax - pmin)
 
@@ -713,6 +717,7 @@ class ATASCanvas(QWidget):
             p.end()
             return
 
+        h_chart = h - self.CLUSTER_H
         pmin, pmax = self._visible_price_range()
         x_left, x_right = self._chart_x_range()
 
@@ -720,37 +725,38 @@ class ATASCanvas(QWidget):
         poc_price, vah, val = self._compute_poc_va(profile)
 
         if self.show_session_lines:
-            self._draw_session_backgrounds(p, int(x_left), int(x_right), h)
+            self._draw_session_backgrounds(p, int(x_left), int(x_right), h_chart)
 
-        self._draw_grid(p, pmin, pmax, int(x_left), int(x_right), h)
+        self._draw_grid(p, pmin, pmax, int(x_left), int(x_right), h_chart)
 
         if self.show_session_lines:
-            self._draw_session_lines(p, int(x_left), int(x_right), h)
+            self._draw_session_lines(p, int(x_left), int(x_right), h_chart)
 
-        self._draw_key_levels(p, pmin, pmax, int(x_left), int(x_right), h, poc_price, vah, val)
-        self._draw_candles(p, pmin, pmax, x_left, x_right - x_left, h)
+        self._draw_key_levels(p, pmin, pmax, int(x_left), int(x_right), h_chart, poc_price, vah, val)
+        self._draw_candles(p, pmin, pmax, x_left, x_right - x_left, h_chart)
 
         if self.show_divergence:
-            self._draw_delta_divergences(p, h)
+            self._draw_delta_divergences(p, h_chart)
 
         if self.show_ma:
-            self._draw_sma(p, h)
+            self._draw_sma(p, h_chart)
 
         if self.show_vol_profile:
             overlay_w = int((x_right - x_left) * self.VOL_OVERLAY_FRAC)
-            self._draw_volume_overlay(p, pmin, pmax, int(x_left), overlay_w, h,
+            self._draw_volume_overlay(p, pmin, pmax, int(x_left), overlay_w, h_chart,
                                       profile, prof_type, prof_label, poc_price, vah, val)
 
-        self._draw_price_scale(p, pmin, pmax, int(x_right), self.PRICE_PANEL_W, h)
+        self._draw_price_scale(p, pmin, pmax, int(x_right), self.PRICE_PANEL_W, h_chart)
 
         sep_pen = QPen(QColor(0x22, 0x22, 0x33))
         sep_pen.setWidth(1)
         p.setPen(sep_pen)
         p.drawLine(int(x_right), 0, int(x_right), h)
 
-        self._draw_current_price_line(p, int(x_left), int(x_right), h)
-        self._draw_mode_indicator(p, w, h)
-        self._draw_scrollbar(p, int(x_left), int(x_right), h)
+        self._draw_current_price_line(p, int(x_left), int(x_right), h_chart)
+        self._draw_mode_indicator(p, w, h_chart)
+        self._draw_cluster_grid(p, int(x_left), int(x_right), h)
+        self._draw_scrollbar(p, int(x_left), int(x_right), h_chart)
         self._draw_zoom_indicator(p, int(x_left), int(x_right))
         p.end()
 
@@ -1052,10 +1058,10 @@ class ATASCanvas(QWidget):
                         if in_body:
                             ct = max(y_rt, body_top)
                             cb = min(y_rb, body_bottom)
-                            # Subtle amber highlight for highest-volume row
+                            # Subtle cyan highlight for highest-volume row
                             if abs(tick_px - poc_lvl_price) < 0.001:
                                 p.fillRect(int(body_x), int(ct), int(body_w),
-                                           max(1, int(cb - ct)), QColor(0xff, 0xcc, 0x00, 18))
+                                           max(1, int(cb - ct)), QColor(0x00, 0xcc, 0xff, 18))
                         elif in_upper:
                             ct = max(y_rt, y_high)
                             cb = min(y_rb, body_top)
@@ -1067,9 +1073,9 @@ class ATASCanvas(QWidget):
                         # Wick rows slightly dimmed but still legible
                         is_poc = abs(tick_px - poc_lvl_price) < 0.001
                         if is_poc:
-                            # POC row: extra-bright amber/white
-                            bid_col = QColor(0xff, 0xcc, 0x44)   # bright amber
-                            ask_col = QColor(0xff, 0xff, 0xaa)   # near-white
+                            # POC row: bright green bid, bright cyan ask
+                            bid_col = QColor(0x00, 0xff, 0x88)   # bright green
+                            ask_col = QColor(0x00, 0xdd, 0xff)   # bright cyan
                         elif lv.ask_ratio >= 1.3:
                             # Ask-dominant: bright green ask, muted red bid
                             ask_col = QColor(0x00, 0xff, 0x88) if not dim else QColor(0x00, 0xcc, 0x66)
@@ -1354,6 +1360,123 @@ class ATASCanvas(QWidget):
         fm = QFontMetrics(self._font_small)
         p.drawText(w - self.PRICE_PANEL_W - fm.horizontalAdvance(mode) - 8, 12, mode)
 
+    # ── draw: cluster heatmap bar ─────────────────────────
+    def _draw_cluster_grid(self, p: QPainter, x0: int, x1: int, h: int):
+        """5-row cluster heatmap across the bottom CLUSTER_H pixels."""
+        if not self._candles:
+            return
+
+        ROW_H    = 16
+        N_ROWS   = 5
+        grid_y   = h - self.CLUSTER_H
+        label_w  = 44  # width of row-label column
+        chart_w  = x1 - x0 - label_w
+
+        # Dark background for cluster area
+        p.fillRect(x0, grid_y, x1 - x0, self.CLUSTER_H, QColor(0x06, 0x06, 0x10))
+        # Separator line between chart and cluster
+        sep = QPen(QColor(0x22, 0x33, 0x44)); sep.setWidth(1)
+        p.setPen(sep)
+        p.drawLine(x0, grid_y, x1, grid_y)
+
+        positions = self._candle_positions()
+        if not positions:
+            return
+
+        # Gather per-candle metrics
+        candle_data = []   # list of (ci, x_center, bid, ask, total, delta)
+        cum_delta   = 0
+        first_cum   = True
+        for ci, x_center in positions:
+            c = self._candles[ci]
+            bid   = sum(lv.bid_vol for lv in c.levels.values())
+            ask   = sum(lv.ask_vol for lv in c.levels.values())
+            total = bid + ask
+            delta = ask - bid
+            if first_cum:
+                cum_delta = delta
+                first_cum = False
+            else:
+                cum_delta += delta
+            candle_data.append((ci, x_center, bid, ask, total, delta, cum_delta))
+
+        # Per-row max for heat scaling
+        max_delta = max((abs(d[5]) for d in candle_data), default=1) or 1
+        max_bid   = max((d[2] for d in candle_data), default=1) or 1
+        max_ask   = max((d[3] for d in candle_data), default=1) or 1
+        max_vol   = max((d[4] for d in candle_data), default=1) or 1
+        max_cum   = max((abs(d[6]) for d in candle_data), default=1) or 1
+
+        row_labels = ["Delta", "Bid", "Ask", "Vol", "Ses Δ"]
+        label_col  = QColor(0x55, 0x66, 0x77)
+        p.setFont(self._font_small)
+        fm = QFontMetrics(self._font_small)
+
+        cw = max(1.0, self._candle_w)
+
+        for row_idx, label in enumerate(row_labels):
+            ry = grid_y + row_idx * ROW_H
+
+            # Row label
+            p.setPen(QPen(label_col))
+            p.drawText(x0 + 2, ry + ROW_H - 4, label)
+
+            # Row separator
+            p.setPen(QPen(QColor(0x11, 0x11, 0x22)))
+            p.drawLine(x0, ry + ROW_H, x1, ry + ROW_H)
+
+            for ci, x_center, bid, ask, total, delta, cum_d in candle_data:
+                cx0  = int(x_center - cw / 2) + 1
+                cx1  = int(x_center + cw / 2) - 1
+                cell_w = max(1, cx1 - cx0)
+                cell_h = ROW_H - 1
+
+                if row_idx == 0:   # Delta
+                    ratio  = abs(delta) / max_delta
+                    alpha  = int(0.15 * 255 + ratio * 0.65 * 255)
+                    color  = QColor(0x00, 0xff, 0x66, alpha) if delta >= 0 else QColor(0xff, 0x33, 0x55, alpha)
+                    val    = delta
+                elif row_idx == 1: # Bid
+                    ratio  = bid / max_bid
+                    alpha  = int(0.15 * 255 + ratio * 0.65 * 255)
+                    color  = QColor(0xff, 0x44, 0x55, alpha)
+                    val    = bid
+                elif row_idx == 2: # Ask
+                    ratio  = ask / max_ask
+                    alpha  = int(0.15 * 255 + ratio * 0.65 * 255)
+                    color  = QColor(0x00, 0xff, 0x88, alpha)
+                    val    = ask
+                elif row_idx == 3: # Vol
+                    ratio  = total / max_vol
+                    alpha  = int(0.15 * 255 + ratio * 0.65 * 255)
+                    color  = QColor(0x00, 0xcc, 0xff, alpha)
+                    val    = total
+                else:              # Ses Δ
+                    ratio  = abs(cum_d) / max_cum
+                    alpha  = int(0.15 * 255 + ratio * 0.65 * 255)
+                    color  = QColor(0x00, 0xff, 0x66, alpha) if cum_d >= 0 else QColor(0xff, 0x33, 0x55, alpha)
+                    val    = cum_d
+
+                p.fillRect(cx0, ry + 1, cell_w, cell_h, color)
+
+                # Hover highlight
+                if ci == self._hover_candle_idx:
+                    border_pen = QPen(QColor(0xff, 0xff, 0xff, 80))
+                    border_pen.setWidth(1)
+                    p.setPen(border_pen)
+                    p.setBrush(Qt.BrushStyle.NoBrush)
+                    p.drawRect(cx0, ry + 1, cell_w - 1, cell_h - 1)
+
+                # Value text — only if cell is wide enough
+                if cw >= 20:
+                    txt = str(val) if abs(val) < 10000 else f"{val/1000:.1f}k"
+                    tw  = fm.horizontalAdvance(txt)
+                    if tw < cell_w - 2:
+                        p.setPen(QPen(QColor(0xff, 0xff, 0xff, 200)))
+                        tx = cx0 + (cell_w - tw) // 2
+                        ty = ry + ROW_H - 4
+                        p.drawText(tx, ty, txt)
+
     # ── draw: mini scrollbar ─────────────────────────────
     def _draw_scrollbar(self, p: QPainter, x0: int, x1: int, h: int):
         """Draw a thin scrollbar at bottom showing position within all data."""
@@ -1442,6 +1565,17 @@ class ATASCanvas(QWidget):
     def mouseMoveEvent(self, ev):
         self._mouse_x = int(ev.position().x())
         self._mouse_y = int(ev.position().y())
+        # Track which candle column the cursor is hovering over
+        hover = None
+        mx = self._mouse_x
+        for ci, x_center in self._candle_positions():
+            half = self._candle_w / 2
+            if abs(mx - x_center) <= half:
+                hover = ci
+                break
+        if hover != self._hover_candle_idx:
+            self._hover_candle_idx = hover
+            self.update()
         if self._drag_start is None:
             return
         sx, sy  = self._drag_start

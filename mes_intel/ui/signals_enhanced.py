@@ -128,6 +128,7 @@ class ConfluenceSignal:
     order_flow: Dict[str, str]
     cross_asset: Dict[str, str]
     regime: str = "unknown"
+    strategy_breakdown: List[Dict] = field(default_factory=list)
 
 
 # ===========================================================================
@@ -407,6 +408,41 @@ class SignalCard(QFrame):
                 )
                 ll.setWordWrap(True)
                 dl.addWidget(ll)
+
+        # strategy breakdown (from ensemble)
+        if sig.strategy_breakdown:
+            shdr = QLabel("── STRATEGY BREAKDOWN ──")
+            shdr.setStyleSheet(
+                f"color:{_DIM};font-size:8px;letter-spacing:2px;"
+                f"font-family:'{_MONO}';margin-top:4px;"
+            )
+            dl.addWidget(shdr)
+            # Sort by absolute score, show top contributors
+            sorted_strats = sorted(
+                sig.strategy_breakdown,
+                key=lambda s: abs(s.get("score", 0)),
+                reverse=True,
+            )
+            for s in sorted_strats[:12]:
+                sc = s.get("score", 0)
+                conf = s.get("confidence", 0)
+                sdir = s.get("direction", "FLAT")
+                name = s.get("name", "?")
+                sc_color = _GRN if sc > 0.1 else _RED if sc < -0.1 else _DIM
+                line = f"  {name}: {sc:+.2f} ({conf:.0%}) {sdir}"
+                # Append key reasoning if available
+                notes = s.get("notes", [])
+                if isinstance(notes, list) and notes:
+                    line += f" — {notes[0][:60]}"
+                elif isinstance(notes, str) and notes:
+                    line += f" — {notes[:60]}"
+                sl = QLabel(line)
+                sl.setStyleSheet(
+                    f"color:{sc_color};font-size:9px;"
+                    f"font-family:'{_MONO}';"
+                )
+                sl.setWordWrap(True)
+                dl.addWidget(sl)
 
         # order flow breakdown
         of = sig.order_flow
@@ -1031,10 +1067,27 @@ class EnhancedSignalsPanel(QWidget):
         if entry:
             self._entry_price = float(entry)
 
-        # Build reason from strategy scores
-        scores = d.get("strategy_scores", {})
-        agreeing = [k for k, v in scores.items() if v.get("direction") == direction]
-        reason = f"ensemble={conf:.0%} agree=[{', '.join(agreeing[:3])}]"
+        # Build reason from strategy breakdown
+        breakdown = d.get("strategy_breakdown", [])
+        self._latest_breakdown = breakdown
+        if breakdown:
+            agreeing = [s["name"] for s in breakdown
+                        if s.get("direction") == direction
+                        and abs(s.get("score", 0)) > 0.1]
+            top = sorted(
+                [s for s in breakdown if abs(s.get("score", 0)) > 0.1],
+                key=lambda s: abs(s["score"]),
+                reverse=True,
+            )[:5]
+            parts = [f"{s['name']}={s['score']:+.2f}" for s in top]
+            n_agree = d.get("strategies_agree", len(agreeing))
+            reason = (f"{n_agree} strategies agree | "
+                      f"{', '.join(parts)}")
+        else:
+            scores = d.get("strategy_scores", {})
+            agreeing = [k for k, v in scores.items()
+                        if v.get("direction") == direction]
+            reason = f"ensemble={conf:.0%} agree=[{', '.join(agreeing[:3])}]"
 
         self._votes["signal_engine"] = AgentVote(
             agent="signal_engine",
@@ -1042,7 +1095,9 @@ class EnhancedSignalsPanel(QWidget):
             confidence=conf,
             reason=reason,
         )
-        self._status_bar.update_vote("signal_engine", direction, conf, reason)
+        self._status_bar.update_vote(
+            "signal_engine", direction, conf, reason
+        )
         self._check_confluence(force=True)
 
     def _on_ensemble_update(self, event: Event):
@@ -1290,6 +1345,7 @@ class EnhancedSignalsPanel(QWidget):
             order_flow=of_context,
             cross_asset=ca_context,
             regime=self._regime,
+            strategy_breakdown=getattr(self, '_latest_breakdown', []),
         )
 
         self._add_signal_card(sig)

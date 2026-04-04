@@ -51,3 +51,12 @@ trade_journal/settings.json
 dist/
 build/
 *.egg-info/
+
+# ML models (binary, large)
+var/mes_intel/models/
+
+# HuggingFace model cache
+.cache/
+
+# Claude worktrees
+.claude/worktrees/

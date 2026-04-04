@@ -173,6 +173,17 @@ class SignalEngine:
         regime_delta = self._regime_threshold_delta.get(self._current_regime, 0.0)
         effective_min_conf = max(0.1, cfg.min_confidence + regime_delta)
 
+        # Brain pattern check: boost/suppress based on historical pattern memory
+        if signal and hasattr(self, '_meta_learner') and self._meta_learner is not None:
+            try:
+                insight = self._meta_learner.get_pattern_insight(regime)
+                if insight["recommendation"] == "BOOST" and insight["confidence"] > 0.5:
+                    signal.confidence = min(1.0, signal.confidence * 1.15)
+                elif insight["recommendation"] == "SUPPRESS" and insight["confidence"] > 0.5:
+                    signal.confidence *= 0.75
+            except Exception:
+                pass
+
         if signal and signal.confidence >= effective_min_conf and signal.strategies_agree >= cfg.min_strategies_agree:
             signal.timestamp = now
             signal.regime = regime
@@ -181,6 +192,24 @@ class SignalEngine:
             signal.id = self.db.insert_signal(signal.to_db_dict())
             self._last_signal_time = now
             self._signal_count += 1
+
+            # Build strategy breakdown for UI
+            strategy_breakdown = []
+            for r in results:
+                entry = {
+                    "name": r.name,
+                    "score": round(r.score, 3),
+                    "confidence": round(r.confidence, 3),
+                    "direction": r.direction,
+                }
+                # Include key meta fields (reasoning)
+                if r.meta:
+                    for key in ("notes", "reason", "adjustments", "active_signals",
+                                "divergence_type", "regime", "shape", "vpin_level",
+                                "vol_regime", "returns", "factors", "notes"):
+                        if key in r.meta:
+                            entry[key] = r.meta[key]
+                strategy_breakdown.append(entry)
 
             # Publish
             self.bus.publish(Event(
@@ -196,6 +225,8 @@ class SignalEngine:
                     "target": signal.target_price,
                     "regime": regime,
                     "risk_reward": signal.risk_reward,
+                    "strategies_agree": signal.strategies_agree,
+                    "strategy_breakdown": strategy_breakdown,
                 },
             ))
 
@@ -266,10 +297,11 @@ class SignalEngine:
         agreement_ratio = strategies_agree / max(len(results), 1)
         confidence = avg_confidence * (0.5 + 0.5 * agreement_ratio)
 
-        # Aggregate entry/stop/target (median of suggestions)
-        entry = float(sorted(entries)[len(entries) // 2]) if entries else None
-        stop = float(sorted(stops)[len(stops) // 2]) if stops else None
-        target = float(sorted(targets)[len(targets) // 2]) if targets else None
+        # Aggregate entry/stop/target (proper median)
+        from statistics import median as _median
+        entry = float(_median(entries)) if entries else None
+        stop = float(_median(stops)) if stops else None
+        target = float(_median(targets)) if targets else None
 
         return Signal(
             direction=direction,

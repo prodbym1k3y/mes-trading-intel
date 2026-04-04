@@ -570,13 +570,13 @@ class SimulatedRithmicFeed(RithmicCallbacks):
 
         while self._running:
             try:
-                # Slow drift in base price (trend)
-                drift_price += random.gauss(0, 0.05)
+                # Slow drift in base price (trend) — enough to create real trends
+                drift_price += random.gauss(0, 0.15)
                 drift_price = max(drift_price, 4000.0)
 
-                # Mean reversion toward drift target
-                mean_rev = (drift_price - self._price) * 0.003
-                sigma = 0.30 if burst_remaining == 0 else 0.60
+                # Mean reversion toward drift target (gentler = more trend)
+                mean_rev = (drift_price - self._price) * 0.002
+                sigma = 0.50 if burst_remaining == 0 else 0.90
                 step = random.gauss(mean_rev, sigma)
 
                 # Snap to tick grid

@@ -118,6 +118,52 @@ def main():
     except Exception as exc:
         log.warning("Phase 3 strategy registration failed: %s", exc)
 
+    # Register Phase 5: advanced quant strategies
+    try:
+        from .strategies.volume_profile_advanced import VolumeProfileAdvancedStrategy
+        from .strategies.delta_flow import DeltaFlowStrategy
+        from .strategies.vpin import VPINStrategy
+        from .strategies.options_flow import OptionsFlowStrategy
+        from .strategies.kalman_fair_value import KalmanFairValueStrategy
+        from .strategies.hurst_regime import HurstRegimeStrategy
+        from .strategies.orderflow_imbalance import OrderFlowImbalanceStrategy
+
+        p5_strategies = [
+            VolumeProfileAdvancedStrategy(),
+            DeltaFlowStrategy(),
+            VPINStrategy(),
+            OptionsFlowStrategy(),
+            KalmanFairValueStrategy(),
+            HurstRegimeStrategy(),
+            OrderFlowImbalanceStrategy(),
+        ]
+        for s in p5_strategies:
+            signal_engine.strategies[s.name] = s
+        log.info("Phase 5: %d advanced quant strategies registered", len(p5_strategies))
+    except Exception as exc:
+        log.warning("Phase 5 quant strategy registration failed: %s", exc)
+
+    # Register Phase 6: systematic quant models
+    try:
+        from .strategies.time_series_momentum import TimeSeriesMomentumStrategy
+        from .strategies.volatility_targeting import VolatilityTargetingStrategy
+        from .strategies.relative_value import RelativeValueStrategy
+        from .strategies.macro_regime import MacroRegimeStrategy
+        from .strategies.factor_correlation import FactorCorrelationStrategy
+
+        p6_strategies = [
+            TimeSeriesMomentumStrategy(),
+            VolatilityTargetingStrategy(),
+            RelativeValueStrategy(),
+            MacroRegimeStrategy(),
+            FactorCorrelationStrategy(),
+        ]
+        for s in p6_strategies:
+            signal_engine.strategies[s.name] = s
+        log.info("Phase 6: %d systematic quant models registered", len(p6_strategies))
+    except Exception as exc:
+        log.warning("Phase 6 quant model registration failed: %s", exc)
+
     # Initialize Phase 4 agents
     from .agents.market_brain import MarketBrain
     from .agents.app_optimizer import AppOptimizer
@@ -125,6 +171,9 @@ def main():
     market_brain   = MarketBrain(config, db, bus)
     app_optimizer  = AppOptimizer(config, db, bus)
     log.info("Phase 4: Market Brain + App Optimizer initialized")
+
+    # Wire brain into signal engine for pattern-based boosting/suppression
+    signal_engine._meta_learner = meta_learner
 
     agents = [signal_engine, trade_journal, chart_monitor, meta_learner,
               news_scanner, market_brain, app_optimizer]
@@ -211,14 +260,12 @@ def main():
     ml_trainer = None
     try:
         from .ml.trainer import MLTrainer
-        ml_trainer = MLTrainer(
-            model_dir=config.ml.model_dir,
-            walk_forward_splits=config.ml.walk_forward_splits,
-            retrain_threshold=config.ml.retrain_threshold,
-        )
+        ml_trainer = MLTrainer(config=config.ml, db=db, event_bus=bus)
         log.info("ML trainer initialized (model_dir=%s)", config.ml.model_dir)
     except ImportError:
         log.warning("ML trainer module not available")
+    except Exception as exc:
+        log.warning("ML trainer init failed: %s", exc)
 
     # Launch desktop app
     from PySide6.QtWidgets import QApplication
@@ -230,7 +277,8 @@ def main():
 
     window = MainWindow(config, db, bus,
                         market_brain=market_brain,
-                        app_optimizer=app_optimizer)
+                        app_optimizer=app_optimizer,
+                        meta_learner=meta_learner)
 
     # Demo mode: simulate some data so the UI isn't empty on first launch
     _seed_demo_data(chart_monitor, signal_engine, news_scanner, db)
@@ -271,7 +319,17 @@ def main():
                     data={"reason": reason},
                     source="main",
                 ))
-                report = ml_trainer.train(db)
+                # Gather training data from DB
+                trades = db.get_trades(limit=5000)
+                market_history = []  # populated from chart_monitor snapshots
+                trade_history = [
+                    {"pnl": getattr(t, "pnl", 0) or 0,
+                     "direction": getattr(t, "direction", ""),
+                     "entry_price": getattr(t, "entry_price", 0),
+                     "exit_price": getattr(t, "exit_price", 0)}
+                    for t in (trades or [])
+                ]
+                report = ml_trainer.train(market_history, trade_history)
                 if report:
                     bus.publish(Event(
                         type=EventType.ML_TRAINING_COMPLETE,
@@ -284,6 +342,65 @@ def main():
     ml_timer = QTimer()
     ml_timer.timeout.connect(_check_ml_retrain)
     ml_timer.start(300_000)  # 5 minutes
+
+    # Pre-market scan: economic calendar + catalysts
+    def _premarket_scan():
+        try:
+            catalysts = news_scanner.scan_premarket_catalysts()
+            for c in catalysts:
+                if c.expected_impact >= 2:
+                    bus.publish(Event(
+                        type=EventType.NEWS_ALERT,
+                        source="news_scanner",
+                        data={
+                            "headline": f"UPCOMING: {c.name} (impact={c.expected_impact}/3)",
+                            "sentiment_score": 0.0,
+                            "category": c.category,
+                        },
+                    ))
+        except Exception:
+            log.debug("Pre-market scan skipped")
+
+    QTimer.singleShot(3000, _premarket_scan)  # 3s after launch
+
+    # Periodic catalyst scan (every 30 min)
+    catalyst_timer = QTimer()
+    catalyst_timer.timeout.connect(_premarket_scan)
+    catalyst_timer.start(1_800_000)
+
+    # Wire advanced order flow alerts into signals feed
+    def _on_orderflow_alert(event: Event):
+        """Forward order flow alerts (institutional patterns, divergence) to news feed."""
+        data = event.data
+        alert_type = data.get("alert_type", "")
+        if alert_type in ("INSTITUTIONAL", "BIG_TRADE"):
+            pattern = data.get("pattern_type", "")
+            side = data.get("side", "")
+            conf = data.get("confidence", 0)
+            size = data.get("estimated_size", 0)
+            headline = f"ORDER FLOW: {pattern} {side} detected (conf={conf:.0%}, size={size})"
+            bus.publish(Event(
+                type=EventType.NEWS_ALERT,
+                source="orderflow_advanced",
+                data={"headline": headline, "sentiment_score": 0.0,
+                      "category": "order_flow"},
+            ))
+        elif alert_type == "CD_DIVERGENCE":
+            div_type = data.get("divergence_type", "")
+            price = data.get("price_extreme", 0)
+            conf = data.get("confidence", 0)
+            headline = f"DELTA DIVERGENCE: {div_type} @ {price:.2f} (conf={conf:.0%})"
+            bus.publish(Event(
+                type=EventType.NEWS_ALERT,
+                source="orderflow_advanced",
+                data={"headline": headline, "sentiment_score": 0.0,
+                      "category": "order_flow"},
+            ))
+
+    try:
+        bus.subscribe(EventType.ORDER_FLOW_UPDATE, _on_orderflow_alert)
+    except Exception:
+        pass
 
     window.show()
     log.info("Desktop app launched — ready for trading")
@@ -358,8 +475,52 @@ def _seed_demo_data(chart_monitor, signal_engine, news_scanner, db):
         except Exception:
             pass
 
-    log.info("Demo data seeded: 500 ticks, %d news items, %d dark pool prints, %d confluence zones",
-             len(demo_news), len(demo_dp_prints), len(demo_zones))
+    # Demo trades so journal/analytics aren't empty
+    demo_trades = [
+        {"signal_id": None, "direction": "LONG", "quantity": 2,
+         "entry_price": 5568.50, "exit_price": 5573.25, "pnl": 47.26,
+         "entry_time": time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 7200)),
+         "exit_time": time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 6600)),
+         "stop_price": 5565.00, "target_price": 5575.00, "fees": 2.48,
+         "r_multiple": 1.36, "hold_time_sec": 600, "source": "demo",
+         "notes": "VWAP bounce + delta confirmation", "status": "closed"},
+        {"signal_id": None, "direction": "SHORT", "quantity": 1,
+         "entry_price": 5580.00, "exit_price": 5576.75, "pnl": 15.63,
+         "entry_time": time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 5400)),
+         "exit_time": time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 4800)),
+         "stop_price": 5582.50, "target_price": 5574.00, "fees": 1.24,
+         "r_multiple": 1.30, "hold_time_sec": 600, "source": "demo",
+         "notes": "VAH rejection + negative delta divergence", "status": "closed"},
+        {"signal_id": None, "direction": "LONG", "quantity": 1,
+         "entry_price": 5575.00, "exit_price": 5572.50, "pnl": -13.74,
+         "entry_time": time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 3600)),
+         "exit_time": time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 3000)),
+         "stop_price": 5572.50, "target_price": 5580.00, "fees": 1.24,
+         "r_multiple": -1.00, "hold_time_sec": 600, "source": "demo",
+         "notes": "Stopped out — fake breakout above IB high", "status": "closed"},
+        {"signal_id": None, "direction": "LONG", "quantity": 2,
+         "entry_price": 5571.25, "exit_price": 5577.50, "pnl": 60.52,
+         "entry_time": time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 2400)),
+         "exit_time": time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 1500)),
+         "stop_price": 5568.00, "target_price": 5578.00, "fees": 2.48,
+         "r_multiple": 1.92, "hold_time_sec": 900, "source": "demo",
+         "notes": "Strong buy absorption at VAL + stacked imbalance", "status": "closed"},
+        {"signal_id": None, "direction": "SHORT", "quantity": 1,
+         "entry_price": 5577.75, "exit_price": 5574.00, "pnl": 17.51,
+         "entry_time": time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 900)),
+         "exit_time": time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 300)),
+         "stop_price": 5580.00, "target_price": 5573.00, "fees": 1.24,
+         "r_multiple": 1.67, "hold_time_sec": 600, "source": "demo",
+         "notes": "Excess at session high + poor high structure", "status": "closed"},
+    ]
+    for trade in demo_trades:
+        try:
+            db.insert_trade(trade)
+        except Exception:
+            pass
+
+    log.info("Demo data seeded: 500 ticks, %d news items, %d dark pool prints, %d confluence zones, %d trades",
+             len(demo_news), len(demo_dp_prints), len(demo_zones), len(demo_trades))
 
 
 if __name__ == "__main__":
