@@ -417,7 +417,10 @@ def main():
     except Exception:
         pass
 
+    window.move(50, 50)  # force on-screen position
     window.show()
+    window.raise_()
+    window.activateWindow()
     log.info("Desktop app launched — ready for trading")
 
     sys.exit(app.exec())

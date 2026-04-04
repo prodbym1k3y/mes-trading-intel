@@ -268,6 +268,8 @@ class DarkPoolAgent:
     def start_monitoring(self):
         """Start polling for dark pool prints. Uses Finnhub if key available,
         otherwise falls back to simulated data."""
+        import threading
+
         self._running = True
         self.bus.publish(Event(
             type=EventType.AGENT_STARTED,
@@ -279,10 +281,12 @@ class DarkPoolAgent:
 
         if finnhub_key:
             log.info("Dark Pool Agent: starting Finnhub dark pool monitoring")
-            self._poll_finnhub(finnhub_key)
+            t = threading.Thread(target=self._poll_finnhub, args=(finnhub_key,), daemon=True)
         else:
             log.info("Dark Pool Agent: no Finnhub key, using simulated data")
-            self._run_simulated()
+            t = threading.Thread(target=self._run_simulated, daemon=True)
+
+        t.start()
 
     def stop_monitoring(self):
         """Stop the monitoring loop."""

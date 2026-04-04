@@ -45,7 +45,6 @@ BG           = QColor(0x0a, 0x0a, 0x0f)   # very dark blue-black
 BG_PANEL     = QColor(0x07, 0x07, 0x0d)
 CYAN         = QColor(0x00, 0xff, 0xff)
 GREEN        = QColor(0x00, 0xff, 0x41)
-AMBER        = QColor(0xff, 0xcc, 0x00)
 ORANGE       = QColor(0xff, 0x88, 0x00)
 RED          = QColor(0xff, 0x22, 0x44)
 PURPLE       = QColor(0xcc, 0x66, 0xff)
@@ -852,9 +851,9 @@ class ATASCanvas(QWidget):
                        QColor(0x00, 0x0a, 0x12, 160))
             p.drawText(x1 - lw - 4, ly, label)
 
-        # POC — thin 1px dashed amber line
+        # POC — thin 1px dashed green line
         y_poc = int(max(0, min(h - 1, self._price_to_y(poc_price))))
-        pen   = QPen(QColor(0xff, 0xcc, 0x00, 180))
+        pen   = QPen(QColor(0x00, 0xff, 0x88, 180))
         pen.setWidth(1); pen.setStyle(Qt.PenStyle.DashLine)
         p.setPen(pen)
         p.drawLine(x0, y_poc, x1, y_poc)
@@ -862,8 +861,8 @@ class ATASCanvas(QWidget):
         fm = QFontMetrics(self._font_small)
         lw = fm.horizontalAdvance("POC")
         p.fillRect(x1 - lw - 6, y_poc - fm.ascent(), lw + 4, fm.height(),
-                   QColor(0x14, 0x0c, 0x00, 160))
-        p.setPen(QPen(QColor(0xff, 0xcc, 0x00, 200)))
+                   QColor(0x00, 0x0c, 0x14, 160))
+        p.setPen(QPen(QColor(0x00, 0xdd, 0xff, 220)))
         p.drawText(x1 - lw - 4, y_poc - 2, "POC")
 
     # ── draw: candles ─────────────────────────────────────
