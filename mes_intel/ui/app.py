@@ -6,6 +6,8 @@ dark pool, analytics, and vanity art.
 from __future__ import annotations
 
 import logging
+import subprocess
+import sys
 import time
 from datetime import datetime, timedelta
 
@@ -66,6 +68,21 @@ from ..event_bus import EventBus, Event, EventType
 from ..orderflow import VolumeProfile
 
 log = logging.getLogger(__name__)
+
+
+def _play_alert(sound_name: str = "Glass") -> None:
+    """Play a system alert sound cross-platform. Fails silently."""
+    try:
+        if sys.platform == "darwin":
+            subprocess.Popen(
+                ["afplay", f"/System/Library/Sounds/{sound_name}.aiff"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+        elif sys.platform == "win32":
+            import winsound
+            winsound.MessageBeep(winsound.MB_ICONASTERISK)
+    except Exception:
+        pass
 
 
 class MainWindow(QMainWindow):
@@ -796,16 +813,9 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-        # Sound alert on high-confidence signals (macOS native)
+        # Sound alert on high-confidence signals
         if conf > 0.75 and self.config.ui_config.sound_enabled:
-            try:
-                import subprocess
-                subprocess.Popen(
-                    ["afplay", "/System/Library/Sounds/Glass.aiff"],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                )
-            except Exception:
-                pass
+            _play_alert("Glass")
 
     def _on_ensemble_update(self, event: Event):
         scores = {}
@@ -1017,14 +1027,7 @@ class MainWindow(QMainWindow):
             f"BIG TRADE: {size} lots @ {price:.2f} ({trade_type})"
         )
         if self.config.ui_config.sound_enabled:
-            try:
-                import subprocess
-                subprocess.Popen(
-                    ["afplay", "/System/Library/Sounds/Submarine.aiff"],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                )
-            except Exception:
-                pass
+            _play_alert("Submarine")
         # Update big trades widget
         self._recent_big_trades.append(event.data)
         if len(self._recent_big_trades) > 50:

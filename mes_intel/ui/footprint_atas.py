@@ -38,6 +38,8 @@ from PySide6.QtGui import (
     QPainterPath, QWheelEvent,
 )
 
+from .theme import MONO_FONT
+
 # ──────────────────────────────────────────────────────────
 #  Palette
 # ──────────────────────────────────────────────────────────
@@ -387,7 +389,7 @@ class ATASCanvas(QWidget):
     # ── fonts ─────────────────────────────────────────────
     def _fonts_init(self):
         # Menlo → Monaco → Courier New fallback chain (clean monospace)
-        mono = "Menlo"
+        mono = MONO_FONT
         self._font_cell  = QFont(mono, 7)
         self._font_small = QFont(mono, 7)
         self._font_small.setBold(True)
@@ -1026,7 +1028,7 @@ class ATASCanvas(QWidget):
             # Scale font with row height (Menlo monospace) — minimum 8pt
             font_pt = 8 if self._row_h < 22 else (9 if self._row_h < 30 else 10)
             if font_pt != getattr(self, '_last_cell_font_pt', 0):
-                self._font_cell = QFont("Menlo", font_pt)
+                self._font_cell = QFont(MONO_FONT, font_pt)
                 self._fm_cell   = QFontMetrics(self._font_cell)
                 self._last_cell_font_pt = font_pt
 
@@ -1655,24 +1657,24 @@ class ATASCanvas(QWidget):
 
 _BTN_BASE = (
     "QPushButton{background:#111827;color:#6b7280;border:1px solid #374151;"
-    "font:7pt 'Menlo';padding:1px 4px;}"
+    "font:7pt 'Consolas', 'Menlo', 'Courier New';padding:1px 4px;}"
     "QPushButton:checked{background:#064e3b;color:#34d399;border:1px solid #34d399;}"
     "QPushButton:hover{color:#e5e7eb;border-color:#6b7280;}"
 )
 _BTN_SMALL = (
     "QPushButton{background:#111827;color:#9ca3af;border:1px solid #374151;"
-    "font:8pt 'Menlo';padding:0px 5px;min-width:22px;}"
+    "font:8pt 'Consolas', 'Menlo', 'Courier New';padding:0px 5px;min-width:22px;}"
     "QPushButton:hover{color:#e5e7eb;border-color:#6b7280;}"
 )
 _BTN_PROFILE = (
     "QPushButton{background:#0a0a14;color:#446688;border:1px solid #222233;"
-    "font:7pt 'Menlo';padding:1px 3px;}"
+    "font:7pt 'Consolas', 'Menlo', 'Courier New';padding:1px 3px;}"
     "QPushButton:checked{background:#003344;color:#00ffff;border:1px solid #00ffff;}"
     "QPushButton:hover{color:#88bbcc;border-color:#446688;}"
 )
 _INPUT_STYLE = (
     "QLineEdit{background:#0a0a1a;color:#00ffcc;border:2px solid #00bbaa;"
-    "font:8pt 'Menlo';padding:2px 4px;}"
+    "font:8pt 'Consolas', 'Menlo', 'Courier New';padding:2px 4px;}"
     "QLineEdit:focus{border:2px solid #00ffcc;background:#0d1225;}"
 )
 
@@ -1721,7 +1723,7 @@ class ATASFootprintPanel(QWidget):
         row1.setContentsMargins(6, 3, 6, 2); row1.setSpacing(4)
 
         title = QLabel("FOOTPRINT")
-        title.setStyleSheet("color:#00ffcc;font:bold 9pt 'Menlo';letter-spacing:2px;")
+        title.setStyleSheet("color:#00ffcc;font:bold 9pt 'Consolas', 'Menlo', 'Courier New';letter-spacing:2px;")
         row1.addWidget(title); row1.addWidget(_sep())
 
         # Quick TF buttons
@@ -1737,7 +1739,7 @@ class ATASFootprintPanel(QWidget):
 
         # Custom TF input
         tf_lbl = QLabel("TF:")
-        tf_lbl.setStyleSheet("color:#00ccaa;font:bold 8pt 'Menlo';")
+        tf_lbl.setStyleSheet("color:#00ccaa;font:bold 8pt 'Consolas', 'Menlo', 'Courier New';")
         row1.addWidget(tf_lbl)
         self._tf_input = QLineEdit("5m")
         self._tf_input.setFixedSize(48, 22)
@@ -1747,7 +1749,7 @@ class ATASFootprintPanel(QWidget):
         row1.addWidget(self._tf_input)
 
         days_lbl = QLabel("Days:")
-        days_lbl.setStyleSheet("color:#00ccaa;font:bold 8pt 'Menlo';")
+        days_lbl.setStyleSheet("color:#00ccaa;font:bold 8pt 'Consolas', 'Menlo', 'Courier New';")
         row1.addWidget(days_lbl)
         self._days_input = QLineEdit("5")
         self._days_input.setFixedSize(36, 22)
@@ -1760,7 +1762,7 @@ class ATASFootprintPanel(QWidget):
         load_btn.setFixedSize(48, 22)
         load_btn.setStyleSheet(
             "QPushButton{background:#063a2e;color:#00ffcc;border:2px solid #00ffcc;"
-            "font:bold 8pt 'Menlo';padding:0px 4px;}"
+            "font:bold 8pt 'Consolas', 'Menlo', 'Courier New';padding:0px 4px;}"
             "QPushButton:hover{background:#00ffcc;color:#000000;}"
             "QPushButton:pressed{background:#00cc99;color:#000000;}"
         )
@@ -1771,7 +1773,7 @@ class ATASFootprintPanel(QWidget):
 
         # Status label
         self._status_lbl = QLabel("5m | 5 days | loading…")
-        self._status_lbl.setStyleSheet("color:#446677;font:8pt 'Menlo';")
+        self._status_lbl.setStyleSheet("color:#446677;font:8pt 'Consolas', 'Menlo', 'Courier New';")
         row1.addWidget(self._status_lbl)
 
         row1.addStretch()
@@ -1779,7 +1781,7 @@ class ATASFootprintPanel(QWidget):
         # Navigation buttons
         _NAV_STYLE = (
             "QPushButton{background:#0d1f17;color:#00cc88;border:1px solid #00cc88;"
-            "font:bold 8pt 'Menlo';padding:1px 6px;}"
+            "font:bold 8pt 'Consolas', 'Menlo', 'Courier New';padding:1px 6px;}"
             "QPushButton:hover{background:#00cc88;color:#000;}"
             "QPushButton:pressed{background:#00aa66;color:#000;}"
         )
@@ -1795,7 +1797,7 @@ class ATASFootprintPanel(QWidget):
 
         row1.addWidget(_sep())
         self._mode_lbl = QLabel("\u25b6 CANDLESTICK")
-        self._mode_lbl.setStyleSheet("color:#444466;font:7pt 'Menlo';")
+        self._mode_lbl.setStyleSheet("color:#444466;font:7pt 'Consolas', 'Menlo', 'Courier New';")
         row1.addWidget(self._mode_lbl)
         root.addLayout(row1)
 
@@ -1823,7 +1825,7 @@ class ATASFootprintPanel(QWidget):
 
         # Profile mode selector
         prof_lbl = QLabel("Profile:")
-        prof_lbl.setStyleSheet("color:#6b7280;font:7pt 'Menlo';")
+        prof_lbl.setStyleSheet("color:#6b7280;font:7pt 'Consolas', 'Menlo', 'Courier New';")
         row2.addWidget(prof_lbl)
 
         self._prof_group = QButtonGroup(self)
@@ -1842,10 +1844,10 @@ class ATASFootprintPanel(QWidget):
 
         # Auto-zoom toggle
         _AZ_ON  = ("QPushButton{background:#064e3b;color:#34d399;border:1px solid #34d399;"
-                   "font:bold 7pt 'Menlo';padding:1px 4px;}"
+                   "font:bold 7pt 'Consolas', 'Menlo', 'Courier New';padding:1px 4px;}"
                    "QPushButton:hover{background:#10b981;color:#000;}")
         _AZ_OFF = ("QPushButton{background:#111827;color:#6b7280;border:1px solid #374151;"
-                   "font:bold 7pt 'Menlo';padding:1px 4px;}"
+                   "font:bold 7pt 'Consolas', 'Menlo', 'Courier New';padding:1px 4px;}"
                    "QPushButton:hover{color:#e5e7eb;border-color:#6b7280;}")
         self._btn_autozoom = QPushButton("⊙ AutoZoom")
         self._btn_autozoom.setCheckable(True)
@@ -1859,19 +1861,19 @@ class ATASFootprintPanel(QWidget):
 
         row2.addWidget(_sep())
 
-        rh_lbl = QLabel("V-Zoom:"); rh_lbl.setStyleSheet("color:#6b7280;font:7pt 'Menlo';")
+        rh_lbl = QLabel("V-Zoom:"); rh_lbl.setStyleSheet("color:#6b7280;font:7pt 'Consolas', 'Menlo', 'Courier New';")
         row2.addWidget(rh_lbl)
         btn_rh_dn = _make_small_btn("\u2212"); btn_rh_up = _make_small_btn("+")
         row2.addWidget(btn_rh_dn); row2.addWidget(btn_rh_up)
 
         row2.addWidget(_sep())
-        cw_lbl = QLabel("H-Zoom:"); cw_lbl.setStyleSheet("color:#6b7280;font:7pt 'Menlo';")
+        cw_lbl = QLabel("H-Zoom:"); cw_lbl.setStyleSheet("color:#6b7280;font:7pt 'Consolas', 'Menlo', 'Courier New';")
         row2.addWidget(cw_lbl)
         btn_cw_dn = _make_small_btn("\u2212"); btn_cw_up = _make_small_btn("+")
         row2.addWidget(btn_cw_dn); row2.addWidget(btn_cw_up)
 
         row2.addWidget(_sep())
-        cs_lbl = QLabel("Theme:"); cs_lbl.setStyleSheet("color:#6b7280;font:7pt 'Menlo';")
+        cs_lbl = QLabel("Theme:"); cs_lbl.setStyleSheet("color:#6b7280;font:7pt 'Consolas', 'Menlo', 'Courier New';")
         row2.addWidget(cs_lbl)
         self._btn_theme = QPushButton("Dark")
         self._btn_theme.setFixedHeight(20); self._btn_theme.setStyleSheet(_BTN_SMALL)
@@ -1879,7 +1881,7 @@ class ATASFootprintPanel(QWidget):
         row2.addStretch()
 
         hint = QLabel("scroll=time-pan  ctrl+scroll=h-zoom  shift+scroll=v-zoom  drag=pan  F=fit  L=latest  dbl-click=fit")
-        hint.setStyleSheet("color:#1f2937;font:6pt 'Menlo';")
+        hint.setStyleSheet("color:#1f2937;font:6pt 'Consolas', 'Menlo', 'Courier New';")
         row2.addWidget(hint)
         root.addLayout(row2)
 
@@ -2017,10 +2019,10 @@ class ATASFootprintPanel(QWidget):
         thresh = self._canvas.FOOTPRINT_SHOW_THRESH
         if rh >= thresh and self._canvas.show_footprint:
             self._mode_lbl.setText("\u25c8 FOOTPRINT")
-            self._mode_lbl.setStyleSheet("color:#00ffcc;font:7pt 'Menlo';")
+            self._mode_lbl.setStyleSheet("color:#00ffcc;font:7pt 'Consolas', 'Menlo', 'Courier New';")
         else:
             self._mode_lbl.setText("\u25b6 CANDLESTICK")
-            self._mode_lbl.setStyleSheet("color:#444466;font:7pt 'Menlo';")
+            self._mode_lbl.setStyleSheet("color:#444466;font:7pt 'Consolas', 'Menlo', 'Courier New';")
         # Sync AutoZoom button if canvas state drifted (e.g. shift+scroll)
         az = self._canvas._auto_zoom
         if self._btn_autozoom.isChecked() != az:

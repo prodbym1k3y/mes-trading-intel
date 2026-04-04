@@ -999,17 +999,24 @@ class NewsScanner:
             except Exception:
                 log.debug("plyer notification failed", exc_info=True)
 
-        # Fallback: macOS native notification
-        try:
-            import subprocess
-            subprocess.run(
-                ["osascript", "-e",
-                 f'display notification "{message}" with title "{title}"'],
-                timeout=5,
-                capture_output=True,
-            )
-        except Exception:
-            log.debug("Desktop notification unavailable")
+        # Fallback: platform-native notification
+        import sys
+        if sys.platform == "darwin":
+            try:
+                import subprocess
+                subprocess.run(
+                    ["osascript", "-e",
+                     f'display notification "{message}" with title "{title}"'],
+                    timeout=5, capture_output=True,
+                )
+            except Exception:
+                log.debug("Desktop notification unavailable")
+        elif sys.platform == "win32":
+            try:
+                from ctypes import windll
+                windll.user32.MessageBeep(0x00000040)
+            except Exception:
+                log.debug("Desktop notification unavailable")
 
     def _check_plyer(self) -> bool:
         """Check if plyer is available (cached)."""
@@ -1048,16 +1055,26 @@ class NewsScanner:
             except Exception:
                 pass
 
-        # Fallback: macOS afplay
-        try:
-            import subprocess
-            subprocess.Popen(
-                ["afplay", str(sound_path)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except Exception:
-            self._system_beep()
+        # Fallback: platform-native audio
+        import sys
+        if sys.platform == "darwin":
+            try:
+                import subprocess
+                subprocess.Popen(
+                    ["afplay", str(sound_path)],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                return
+            except Exception:
+                pass
+        elif sys.platform == "win32":
+            try:
+                import winsound
+                winsound.PlaySound(str(sound_path), winsound.SND_FILENAME | winsound.SND_ASYNC)
+                return
+            except Exception:
+                pass
+        self._system_beep()
 
     def _check_audio(self) -> bool:
         """Check if simpleaudio is available (cached)."""

@@ -13,11 +13,32 @@ cp .env.example .env             # optional: add API keys
 ./run.sh                         # launches the app
 ```
 
+## Quick Start (Windows)
+
+```powershell
+git clone <repo-url> trading
+cd trading
+python -m venv .
+Scripts\activate.bat
+pip install -r requirements.txt  # ~10 min first time
+copy .env.example .env           # optional: add API keys
+run.bat                          # launches the app
+```
+
+**Windows notes:**
+- Use `python` (not `python3`) — Windows Python installer registers as `python`
+- No `brew install libomp` needed — XGBoost ships with OpenMP on Windows
+- If `simpleaudio` fails to install, install [Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) first, or skip it (audio alerts will fall back to system beeps)
+- Venv lives in `Scripts/` (not `bin/`)
+
 ## Manual Launch
 
 ```bash
-source bin/activate
-python3 -m mes_intel
+# macOS
+source bin/activate && python3 -m mes_intel
+
+# Windows
+Scripts\activate.bat && python -m mes_intel
 ```
 
 ## API Keys (all optional)
@@ -41,7 +62,7 @@ The app runs fully in simulated mode with no keys. Add keys to `.env` for:
 ## External Dependencies
 
 - **Python 3.12+** (tested on 3.14)
-- **libomp** — `brew install libomp` (XGBoost acceleration; falls back to heuristic scorer without it)
+- **macOS only:** `brew install libomp` (XGBoost acceleration; falls back to heuristic scorer without it)
 - **HuggingFace models** — FinBERT downloads automatically on first news event
 
 ## Troubleshooting
@@ -50,3 +71,4 @@ The app runs fully in simulated mode with no keys. Add keys to `.env` for:
 - `Populating font family aliases took X ms` — Harmless Qt font fallback warning.
 - `No module named 'pyobjus'` — Harmless; desktop notifications fall back gracefully.
 - High CPU — Normal during first ~30s (FinBERT loading + demo data seeding), then settles.
+- **Windows:** If you get `DLL load failed` for torch/xgboost, install the latest [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe).

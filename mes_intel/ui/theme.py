@@ -4,6 +4,10 @@ Deep black with hot neon cyan primary, electric magenta secondary,
 neon green profits, hot pink losses. Everything glows. Everything is monospace.
 This is what a hacker trading terminal from 1985 looks like.
 """
+import sys
+
+# Cross-platform monospace font: Menlo (macOS), Consolas (Windows)
+MONO_FONT = "Consolas" if sys.platform == "win32" else "Menlo"
 
 # Color palette — pure neon aggression
 COLORS = {
@@ -93,7 +97,7 @@ QMainWindow {{
 QWidget {{
     background-color: transparent;
     color: {COLORS['text_primary']};
-    font-family: 'Courier New', 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
     font-size: 12px;
 }}
 
@@ -121,7 +125,7 @@ QFrame#card {{
 QLabel {{
     color: {COLORS['text_primary']};
     background: transparent;
-    font-family: 'Courier New', 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
 }}
 
 QLabel#title {{
@@ -191,7 +195,7 @@ QTableWidget {{
     selection-background-color: #001a2a;
     selection-color: {COLORS['cyan']};
     font-size: 11px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
 }}
 
 QTableWidget::item {{
@@ -215,7 +219,7 @@ QHeaderView::section {{
     font-weight: bold;
     font-size: 10px;
     letter-spacing: 2px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
 }}
 
 /* ── Buttons — neon outlined, Tron-style ── */
@@ -228,7 +232,7 @@ QPushButton {{
     font-weight: bold;
     font-size: 11px;
     letter-spacing: 2px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
 }}
 
 QPushButton:hover {{
@@ -276,7 +280,7 @@ QTabBar::tab {{
     font-size: 10px;
     font-weight: bold;
     letter-spacing: 2px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
     min-width: 80px;
 }}
 
@@ -350,7 +354,7 @@ QProgressBar {{
     text-align: center;
     color: {COLORS['cyan']};
     font-size: 10px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
     height: 14px;
 }}
 
@@ -389,7 +393,7 @@ QTextEdit, QPlainTextEdit {{
     border-radius: 0px;
     padding: 4px;
     font-size: 11px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
     selection-background-color: {COLORS['cyan_dim']};
     selection-color: {COLORS['bg_dark']};
 }}
@@ -400,7 +404,7 @@ QLineEdit {{
     border: 1px solid {COLORS['cyan_dim']};
     border-radius: 0px;
     padding: 4px 8px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
 }}
 
 QLineEdit:focus {{
@@ -415,7 +419,7 @@ QComboBox {{
     border: 1px solid {COLORS['cyan_dim']};
     border-radius: 0px;
     padding: 4px 8px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
 }}
 
 QComboBox::drop-down {{
@@ -439,7 +443,7 @@ QToolTip {{
     border: 1px solid {COLORS['cyan']};
     padding: 4px 8px;
     font-size: 11px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
 }}
 
 /* ── Status bar ── */
@@ -448,7 +452,7 @@ QStatusBar {{
     color: {COLORS['cyan']};
     border-top: 1px solid {COLORS['cyan_dim']};
     font-size: 10px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
     letter-spacing: 1px;
 }}
 
@@ -461,7 +465,7 @@ QMenu {{
     background: {COLORS['bg_card']};
     color: {COLORS['text_primary']};
     border: 1px solid {COLORS['cyan_dim']};
-    font-family: 'Courier New', monospace;
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
 }}
 
 QMenu::item:selected {{
@@ -473,7 +477,7 @@ QMenu::item:selected {{
 QCheckBox {{
     color: {COLORS['text_primary']};
     spacing: 6px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
 }}
 
 QCheckBox::indicator {{
@@ -496,7 +500,7 @@ QSpinBox, QDoubleSpinBox {{
     border: 1px solid {COLORS['cyan_dim']};
     border-radius: 0px;
     padding: 3px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
 }}
 
 /* ── Group boxes ── */
@@ -508,7 +512,7 @@ QGroupBox {{
     color: {COLORS['magenta']};
     font-size: 10px;
     letter-spacing: 2px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
 }}
 
 QGroupBox::title {{
