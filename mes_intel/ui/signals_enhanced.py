@@ -973,6 +973,17 @@ class EnhancedSignalsPanel(QWidget):
         feed_hdr_lay.addWidget(self._count_lbl)
         feed_lay.addWidget(feed_hdr)
 
+        # Live strategy scores strip
+        self._live_scores_lbl = QLabel("Ensemble: waiting for data...")
+        self._live_scores_lbl.setStyleSheet(
+            f"color:{_DIM};font-size:8px;font-family:'{_MONO}';"
+            f"padding:2px 8px;background:{COLORS.get('bg_panel', '#0a0a12')};"
+            f"border-bottom:1px solid {COLORS.get('cyan_dim', '#113')};"
+        )
+        self._live_scores_lbl.setWordWrap(True)
+        self._live_scores_lbl.setFixedHeight(28)
+        feed_lay.addWidget(self._live_scores_lbl)
+
         # Scroll area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -1107,6 +1118,30 @@ class EnhancedSignalsPanel(QWidget):
         self._regime = regime
         if not scores:
             return
+
+        # Update live strategy scores strip (top 8 by absolute score)
+        try:
+            sorted_scores = sorted(scores.items(), key=lambda x: abs(x[1]), reverse=True)
+            top = sorted_scores[:8]
+            parts = []
+            for name, sc in top:
+                color_marker = "+" if sc > 0.1 else ("-" if sc < -0.1 else "~")
+                parts.append(f"{name}:{sc:+.2f}")
+            regime_str = regime.upper() if regime else "?"
+            self._live_scores_lbl.setText(
+                f"[{regime_str}] " + "  ".join(parts)
+            )
+            # Color based on overall bias
+            net = sum(sc for _, sc in top)
+            color = _GRN if net > 0.5 else (_RED if net < -0.5 else _DIM)
+            self._live_scores_lbl.setStyleSheet(
+                f"color:{color};font-size:8px;font-family:'{_MONO}';"
+                f"padding:2px 8px;background:{COLORS.get('bg_panel', '#0a0a12')};"
+                f"border-bottom:1px solid {COLORS.get('cyan_dim', '#113')};"
+            )
+        except Exception:
+            pass
+
         # Derive chart_monitor direction from order_flow strategy score
         of_score = scores.get("order_flow", 0)
         mom_score = scores.get("momentum", 0)

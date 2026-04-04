@@ -169,6 +169,41 @@ TOOLS = [
             "required": [],
         },
     },
+    {
+        "name": "get_strategy_brain_report",
+        "description": (
+            "Get the brain's intelligence report on all 35 strategies. Shows each strategy's "
+            "current weight, accuracy, win rate, decay status (improving/stable/decaying), "
+            "cumulative P&L, regime performance breakdown, and learning trajectory. "
+            "Use this to answer questions like 'Which strategies are working best right now?' "
+            "or 'What's decaying?'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "get_pattern_insight",
+        "description": (
+            "Query the brain's pattern memory for the current regime, day, and time. "
+            "Returns historical win rate, sample size, best-performing strategy combos, "
+            "and whether the brain recommends boosting or suppressing signals right now. "
+            "Use this to answer 'Should I trade right now?' or 'What works best on Fridays in trending?'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "regime": {
+                    "type": "string",
+                    "description": "Market regime to query (e.g. 'trending', 'ranging', 'volatile'). Leave empty for current.",
+                    "default": "",
+                }
+            },
+            "required": [],
+        },
+    },
 ]
 
 
@@ -196,6 +231,11 @@ class ToolExecutor:
             elif tool_name == "get_market_regime":
                 limit = tool_input.get("limit", 5)
                 return self._get_market_regime(min(int(limit), 20))
+            elif tool_name == "get_strategy_brain_report":
+                return self._get_strategy_brain_report()
+            elif tool_name == "get_pattern_insight":
+                regime = tool_input.get("regime", "")
+                return self._get_pattern_insight(regime)
             else:
                 return f"ERROR: Unknown tool '{tool_name}'"
         except Exception as exc:
@@ -393,6 +433,139 @@ class ToolExecutor:
             return "\n".join(lines)
         except Exception as exc:
             return f"ERROR getting regime: {exc}"
+
+    def _get_strategy_brain_report(self) -> str:
+        """Get the brain's full strategy intelligence report."""
+        try:
+            from ..agents.meta_learner import MetaLearner
+            # Find meta_learner via event bus subscribers or direct access
+            report = []
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+
+            # Pull strategy tracker data from agent_knowledge
+            rows = conn.execute(
+                "SELECT agent_name, key, value_json FROM agent_knowledge "
+                "WHERE knowledge_type = 'tracker' AND key = 'state' "
+                "ORDER BY agent_name"
+            ).fetchall()
+            conn.close()
+
+            if not rows:
+                return "No strategy brain data yet. Trades are needed for the brain to learn."
+
+            lines = ["=== STRATEGY BRAIN REPORT ===", ""]
+            for r in rows:
+                name = r["agent_name"].replace("strategy:", "")
+                try:
+                    v = json.loads(r["value_json"]) if isinstance(r["value_json"], str) else r["value_json"]
+                except Exception:
+                    v = {}
+                acc = v.get("accuracy", 0)
+                wr = v.get("win_rate", 0)
+                weight = v.get("weight", 1.0)
+                ks = v.get("knowledge_score", 1.0)
+                lessons = v.get("lessons_learned", 0)
+
+                status = "SHARP" if acc >= 0.6 else ("WEAK" if acc < 0.4 else "OK")
+                lines.append(
+                    f"  {name:30s} weight={weight:.2f}  acc={acc:.0%}  "
+                    f"WR={wr:.0%}  lessons={lessons}  [{status}]"
+                )
+
+            # Pull weight history
+            wh = conn if hasattr(conn, 'execute') else sqlite3.connect(self.db_path)
+            try:
+                conn2 = sqlite3.connect(self.db_path)
+                conn2.row_factory = sqlite3.Row
+                weight_rows = conn2.execute(
+                    "SELECT strategy_name, weight, win_count, loss_count "
+                    "FROM strategy_weights_history "
+                    "ORDER BY timestamp DESC LIMIT 50"
+                ).fetchall()
+                conn2.close()
+                if weight_rows:
+                    lines.append("")
+                    lines.append("=== RECENT WEIGHT CHANGES ===")
+                    seen = set()
+                    for wr in weight_rows:
+                        name = wr["strategy_name"]
+                        if name not in seen:
+                            seen.add(name)
+                            w = wr["weight"]
+                            wins = wr["win_count"]
+                            losses = wr["loss_count"]
+                            lines.append(f"  {name:30s} w={w:.3f}  W={wins} L={losses}")
+            except Exception:
+                pass
+
+            return "\n".join(lines)
+        except Exception as exc:
+            return f"ERROR getting brain report: {exc}"
+
+    def _get_pattern_insight(self, regime: str = "") -> str:
+        """Query the brain's pattern memory."""
+        try:
+            import time as _time
+            from datetime import datetime
+
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+
+            rows = conn.execute(
+                "SELECT key, value_json, confidence FROM agent_knowledge "
+                "WHERE agent_name = 'meta_learner' AND knowledge_type = 'trade_pattern' "
+                "ORDER BY confidence DESC"
+            ).fetchall()
+            conn.close()
+
+            if not rows:
+                return "No pattern data yet. The brain needs trades to build pattern memory."
+
+            now = datetime.now()
+            current_key = f"{regime or 'unknown'}_{now.strftime('%A')}_{now.hour:02d}"
+
+            lines = ["=== BRAIN PATTERN MEMORY ===", ""]
+            lines.append(f"Current: {now.strftime('%A')} {now.hour:02d}:00 | Regime: {regime or 'unknown'}")
+            lines.append(f"Looking for pattern: {current_key}")
+            lines.append("")
+
+            # Show current pattern first
+            found_current = False
+            for r in rows:
+                try:
+                    v = json.loads(r["value_json"]) if isinstance(r["value_json"], str) else r["value_json"]
+                except Exception:
+                    v = {}
+                key = r["key"]
+                wins = v.get("wins", 0)
+                losses = v.get("losses", 0)
+                total = wins + losses
+                if total == 0:
+                    continue
+
+                wr = wins / total
+                strats = v.get("strategies", {})
+                top_strats = sorted(strats.items(), key=lambda x: x[1], reverse=True)[:3]
+                strats_str = ", ".join(f"{s}({c})" for s, c in top_strats) if top_strats else "none"
+
+                marker = " ◀ CURRENT" if key == current_key else ""
+                if key == current_key:
+                    found_current = True
+
+                rec = "BOOST ↑" if wr >= 0.6 and total >= 10 else (
+                    "SUPPRESS ↓" if wr <= 0.35 and total >= 10 else "NEUTRAL")
+                lines.append(
+                    f"  {key:35s} WR={wr:.0%} ({wins}W/{losses}L)  "
+                    f"top=[{strats_str}]  → {rec}{marker}"
+                )
+
+            if not found_current:
+                lines.append(f"\n  No pattern data for {current_key} yet.")
+
+            return "\n".join(lines)
+        except Exception as exc:
+            return f"ERROR getting pattern insight: {exc}"
 
 
 # ── Main assistant class ──────────────────────────────────────────────────────

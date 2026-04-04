@@ -1088,6 +1088,41 @@ class MetaAIDashboard(QWidget):
         pm_l.addWidget(self.team_meeting_panel, 1)
         right_tabs.addTab(pm_w, "MEETINGS")
 
+        # Tab: Brain — strategy weights, patterns, decay
+        brain_w = QWidget()
+        brain_l = QVBoxLayout(brain_w)
+        brain_l.setContentsMargins(4, 4, 4, 4)
+        brain_l.setSpacing(4)
+        brain_hdr = QLabel("▸ STRATEGY BRAIN — LEARNING STATE")
+        brain_hdr.setStyleSheet(
+            f"color: {CYAN}; font-size: 10px; font-weight: bold; "
+            f"font-family: 'Courier New'; letter-spacing: 1px;"
+        )
+        brain_l.addWidget(brain_hdr)
+
+        # Pattern insight label
+        self._pattern_label = QLabel("Pattern: loading...")
+        self._pattern_label.setWordWrap(True)
+        self._pattern_label.setStyleSheet(
+            f"color: {AMBER}; font-size: 10px; font-family: 'Courier New'; "
+            f"padding: 4px; background: {BG_CARD}; border: 1px solid {BORDER};"
+        )
+        brain_l.addWidget(self._pattern_label)
+
+        # Strategy brain table (scroll area)
+        brain_scroll = QScrollArea()
+        brain_scroll.setWidgetResizable(True)
+        brain_scroll.setStyleSheet(f"background: {BG}; border: none;")
+        self._brain_inner = QWidget()
+        self._brain_inner.setStyleSheet(f"background: {BG};")
+        self._brain_layout = QVBoxLayout(self._brain_inner)
+        self._brain_layout.setContentsMargins(2, 2, 2, 2)
+        self._brain_layout.setSpacing(2)
+        brain_scroll.setWidget(self._brain_inner)
+        brain_l.addWidget(brain_scroll, 1)
+
+        right_tabs.addTab(brain_w, "BRAIN")
+
         main_split.addWidget(right_tabs)
         main_split.setSizes([520, 560])
         root.addWidget(main_split, 1)
@@ -1270,6 +1305,72 @@ class MetaAIDashboard(QWidget):
                 "adjustments": pm.weight_changes,
             })
         self.team_meeting_panel.update_meetings(meetings_data[:10])
+
+        # ── Brain report ───────────────────────────────────────────────────────
+        try:
+            if hasattr(ml, 'get_strategy_brain_report'):
+                brain_report = ml.get_strategy_brain_report()
+                self._update_brain_panel(brain_report)
+
+            if hasattr(ml, 'get_pattern_insight'):
+                regime = getattr(ml, '_current_regime', 'unknown')
+                insight = ml.get_pattern_insight(regime)
+                wr = insight.get("win_rate", 0.5)
+                n = insight.get("sample_size", 0)
+                rec = insight.get("recommendation", "NEUTRAL")
+                best = ", ".join(insight.get("best_strategies", [])[:3]) or "—"
+                rec_color = GREEN if rec == "BOOST" else (RED if rec == "SUPPRESS" else AMBER)
+                self._pattern_label.setText(
+                    f"Pattern [{insight.get('pattern_key', '?')}]:  WR={wr:.0%} ({n} trades)  "
+                    f"Best: {best}  → {rec}"
+                )
+                self._pattern_label.setStyleSheet(
+                    f"color: {rec_color}; font-size: 10px; font-family: 'Courier New'; "
+                    f"padding: 4px; background: {BG_CARD}; border: 1px solid {BORDER};"
+                )
+        except Exception:
+            pass
+
+    def _update_brain_panel(self, report: list[dict]):
+        """Rebuild the brain strategy cards from the report."""
+        # Clear old
+        while self._brain_layout.count():
+            item = self._brain_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        if not report:
+            lbl = QLabel("No brain data yet — trades are needed for learning.")
+            lbl.setStyleSheet(f"color: {DIM}; font-size: 10px; font-family: 'Courier New';")
+            self._brain_layout.addWidget(lbl)
+            return
+
+        for entry in report[:20]:
+            name = entry.get("name", "?")
+            weight = entry.get("weight", 1.0)
+            acc = entry.get("accuracy", 0)
+            wr = entry.get("win_rate", 0)
+            trend = entry.get("trend", "stable")
+            pnl = entry.get("cumulative_pnl", 0)
+            total = entry.get("total_trades", 0)
+
+            trend_icon = "↑" if trend == "improving" else ("↓" if trend == "decaying" else "→")
+            trend_color = GREEN if trend == "improving" else (RED if trend == "decaying" else AMBER)
+            acc_color = GREEN if acc >= 0.6 else (RED if acc < 0.4 else AMBER)
+            pnl_color = GREEN if pnl > 0 else (RED if pnl < 0 else DIM)
+
+            row = QLabel(
+                f"  {name:28s}  w={weight:.2f}  acc={acc:.0%}  WR={wr:.0%}  "
+                f"P&L=${pnl:+.0f}  [{total}t]  {trend_icon} {trend}"
+            )
+            row.setStyleSheet(
+                f"color: {acc_color}; font-size: 9px; font-family: 'Courier New'; "
+                f"padding: 1px 4px; background: {BG_CARD}; "
+                f"border-left: 2px solid {trend_color};"
+            )
+            self._brain_layout.addWidget(row)
+
+        self._brain_layout.addStretch()
 
     def _refresh_from_db(self):
         """Supplement with data from database if no meta_learner."""
