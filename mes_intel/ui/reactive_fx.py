@@ -29,7 +29,7 @@ class ScrollingTicker(QWidget):
         self._speed = 2
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
-        self._timer.start(30)
+        self._timer.start(60)
 
     def set_text(self, text: str):
         self._text = text + "  ◈  "
@@ -85,7 +85,7 @@ class DeltaBar(QWidget):
         self._display_delta = 0.0
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
-        self._timer.start(30)
+        self._timer.start(100)
 
     def set_delta(self, value: int):
         self._delta = max(-1000, min(1000, value))
@@ -141,7 +141,7 @@ class WaveformBars(QWidget):
         self._t = 0
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
-        self._timer.start(50)
+        self._timer.start(120)
 
     def set_velocity(self, trades_per_second: float):
         self._velocity = min(1.0, trades_per_second / 10.0)
@@ -190,7 +190,7 @@ class ScanlineBorder(QWidget):
         self._perimeter = 0
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
-        self._timer.start(20)
+        self._timer.start(80)
         self._sync_geometry()
 
     def _sync_geometry(self):
@@ -255,7 +255,7 @@ class InfluxIndicator(QWidget):
         self._font = QFont("Courier New", 8, QFont.Bold)
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
-        self._timer.start(50)
+        self._timer.start(120)
 
     def push_delta(self, delta_rate: float, positive: bool):
         """Call with abs delta rate and direction. Checks against rolling avg."""
@@ -342,7 +342,7 @@ class NeonTabBar(QTabBar):
         self._font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 2)
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
-        self._timer.start(60)   # ~17fps — light on CPU
+        self._timer.start(150)   # ~7fps — decorative glow
         self.setFont(self._font)
 
     def _tick(self):
@@ -423,7 +423,7 @@ class BreathingBackground(QWidget):
         self._phase = 0.0
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
-        self._timer.start(80)   # ~12fps — very slow breathe
+        self._timer.start(500)   # ~2fps — very slow breathe
 
     def _tick(self):
         # ~0.015 rad/tick × 12 fps ≈ 0.18 rad/s → ~35s per full cycle

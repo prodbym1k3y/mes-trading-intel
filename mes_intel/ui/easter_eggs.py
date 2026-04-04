@@ -228,7 +228,7 @@ class EasterEggOverlay(QWidget):
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
-        self._timer.start(33)  # ~30fps
+        self._timer.start(200)  # idle rate — speeds up when effects active
 
     def _tick(self):
         now = time.time()
@@ -261,9 +261,10 @@ class EasterEggOverlay(QWidget):
         self._update_signal_glow()
 
         if self._anything_active():
+            self._timer.setInterval(33)   # 30fps during effects
             self.update()
-        else:
-            self.update()  # always update for idle detection
+        elif self._timer.interval() != 200:
+            self._timer.setInterval(200)  # idle — save CPU
 
     def _anything_active(self) -> bool:
         return bool(

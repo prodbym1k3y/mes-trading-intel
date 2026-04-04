@@ -318,7 +318,7 @@ class MainWindow(QMainWindow):
         title.mousePressEvent = lambda e: self._eggs.on_logo_click()
         title_col.addWidget(title)
 
-        subtitle = QLabel("TRADING INTELLIGENCE SYSTEM // v3.0")
+        subtitle = QLabel("TRADING INTELLIGENCE SYSTEM // v4.0")
         subtitle.setStyleSheet(
             f"font-size: 9px; color: {COLORS['magenta']}; letter-spacing: 3px; "
             f"font-family: 'Courier New', monospace; background: transparent;"
@@ -688,7 +688,7 @@ class MainWindow(QMainWindow):
 
         self._update_clock()
         self._status_label.setText("◈ SYSTEMS ONLINE ▸ AWAITING MARKET DATA...")
-        self._ticker.set_text("◈ MES INTEL v3.0 ONLINE  ◈  ORDER FLOW ARMED  ◈  SIGNAL ENGINE READY  ◈  HIGH CONFIDENCE ONLY  ◈  AWAITING MARKET DATA  ◈  ")
+        self._ticker.set_text("◈ MES INTEL v4.0 ONLINE  ◈  ORDER FLOW ARMED  ◈  SIGNAL ENGINE READY  ◈  HIGH CONFIDENCE ONLY  ◈  AWAITING MARKET DATA  ◈  ")
 
     def _update_clock(self):
         now = datetime.now()

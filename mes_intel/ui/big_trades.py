@@ -245,7 +245,7 @@ class BigTradesWidget(QWidget):
 
         self._refresh_timer = QTimer(self)
         self._refresh_timer.timeout.connect(self.update)
-        self._refresh_timer.start(500)
+        self._refresh_timer.start(2000)
 
     def add_trade(self, timestamp: float, price: float, size: int, side: str):
         trade = self.engine.process_trade(timestamp, price, size, side)
@@ -461,7 +461,7 @@ class BigTradesHeatmap(QWidget):
 
         self._refresh = QTimer(self)
         self._refresh.timeout.connect(self._rebuild_grid)
-        self._refresh.start(1000)
+        self._refresh.start(3000)
 
     def _rebuild_grid(self):
         trades = self.engine.get_big_trades(2000)
@@ -598,7 +598,7 @@ class BigTradesStatsPanel(QFrame):
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._refresh)
-        self._timer.start(500)
+        self._timer.start(2000)
 
     def _make_label(self, text: str) -> QLabel:
         lbl = QLabel(text)

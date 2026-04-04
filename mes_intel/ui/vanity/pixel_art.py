@@ -38,7 +38,7 @@ class _VanityElement(QWidget):
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
-        self._timer.start(80)  # ~12 fps
+        self._timer.start(200)  # ~5 fps — decorative only
 
     def _tick(self):
         self._frame += 1

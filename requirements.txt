@@ -37,6 +37,19 @@ websocket-client>=1.6.0
 # Web scraping (for news feeds)
 beautifulsoup4>=4.12.0
 
+# ATAS bridge (file watcher)
+watchdog>=3.0.0
+
+# Analytics extras (optional — graceful fallback if missing)
+pyqtgraph>=0.13.0
+empyrical>=0.5.5
+
+# Desktop notifications (optional — graceful fallback)
+plyer>=2.1.0
+
+# Sound alerts (optional — graceful fallback)
+simpleaudio>=1.0.4
+
 # Environment & config
 python-dotenv>=1.0.0
 

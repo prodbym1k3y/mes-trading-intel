@@ -61,7 +61,7 @@ class MatrixGridBackground(QWidget):
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._step)
-        self._timer.start(60)    # ~17 fps — light on CPU
+        self._timer.start(250)   # ~4 fps — background decoration
 
     def set_volatility(self, v: float):
         self._volatility = max(0.0, min(1.0, v))
@@ -69,7 +69,7 @@ class MatrixGridBackground(QWidget):
     def set_active(self, active: bool):
         self._active = active
         if active:
-            self._timer.start(60)
+            self._timer.start(250)
         else:
             self._timer.stop()
             self.update()
@@ -329,7 +329,7 @@ class CRTIntensifier(QWidget):
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
-        self._timer.start(100)   # 10 fps noise flicker
+        self._timer.start(500)   # 2 fps noise flicker
 
     def _tick(self):
         self._noise_frame += 1
@@ -395,7 +395,7 @@ class AnimatedTabBar(QWidget):
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
-        self._timer.start(40)
+        self._timer.start(120)
 
     def set_active_tab(self, x: int, w: int):
         self._active_x = x

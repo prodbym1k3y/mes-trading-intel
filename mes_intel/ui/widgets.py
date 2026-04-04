@@ -771,7 +771,7 @@ class BigTradesWidget(QWidget):
 
         # Price axis labels
         p.setPen(QColor(COLORS.get("text_dim", "#606080")))
-        p.setFont(QFont("monospace", 8))
+        p.setFont(QFont("Menlo", 8))
         p.drawText(2, h - margin, f"{price_min:.0f}")
         p.drawText(2, margin + 10, f"{price_max:.0f}")
 
@@ -808,7 +808,7 @@ class InstitutionalFlowWidget(QWidget):
             return
 
         # Draw pattern list
-        p.setFont(QFont("monospace", 10))
+        p.setFont(QFont("Menlo", 10))
         y = 20
         line_h = 22
 
@@ -886,7 +886,7 @@ class DOMImbalanceWidget(QWidget):
         # Spoofing alert at top
         if self._spoofing_alert and self._blink:
             p.setPen(QColor("#ffff00"))
-            p.setFont(QFont("monospace", 10, QFont.Weight.Bold))
+            p.setFont(QFont("Menlo", 10, QFont.Weight.Bold))
             p.drawText(4, 16, self._spoofing_alert)
 
         if not self._bids and not self._asks:
@@ -899,7 +899,7 @@ class DOMImbalanceWidget(QWidget):
         max_vol = max(all_vols) or 1
 
         row_h = min(20, (h - 40) // max(len(self._bids) + len(self._asks), 1))
-        p.setFont(QFont("monospace", 8))
+        p.setFont(QFont("Menlo", 8))
 
         # Draw asks (above) then bids (below) — simplified single column layout
         y_start = 30 if self._spoofing_alert else 10
@@ -970,7 +970,7 @@ class OrderFlowSummaryWidget(QWidget):
             p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Waiting for flow data...")
             return
 
-        p.setFont(QFont("monospace", 9))
+        p.setFont(QFont("Menlo", 9))
 
         # Row 1: Aggressive buy vs sell bar
         agg_buy = self._data.get("aggressive_buy_vol", 0)
@@ -1156,7 +1156,7 @@ class AdvancedFootprintWidget(QWidget):
                     p.fillRect(bx, py, bar_w - 1, cell_h, bg)
 
                 # Cell text: "BID x ASK"
-                p.setFont(QFont("monospace", max(6, int(8 * self._zoom))))
+                p.setFont(QFont("Menlo", max(6, int(8 * self._zoom))))
                 p.setPen(QColor(COLORS.get("text_muted", "#606080")))
                 if bid_v > 0 or ask_v > 0:
                     cell_text = f"{bid_v} x {ask_v}"
@@ -1192,7 +1192,7 @@ class AdvancedFootprintWidget(QWidget):
             p.drawRect(bx, 0, bar_w - 1, h)
 
         # Price axis (left)
-        p.setFont(QFont("monospace", 7))
+        p.setFont(QFont("Menlo", 7))
         p.setPen(QColor(COLORS.get("text_dim", "#606080")))
         for price in range(int(price_min), int(price_max) + 1, max(1, int((price_max - price_min) / 10))):
             py = h - cell_h - int((price - price_min) / max((price_max - price_min), 1) * (h - cell_h * 2))

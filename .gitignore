@@ -28,6 +28,7 @@ gex_cron.log
 # Environment / secrets
 .env
 .env.*
+!.env.example
 *.env
 trade_journal/settings.json
 

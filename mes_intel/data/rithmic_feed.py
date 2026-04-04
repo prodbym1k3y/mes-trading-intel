@@ -458,15 +458,15 @@ class SimulatedRithmicFeed(RithmicCallbacks):
     _TICK_SIZE = 0.25
     _SPREAD_TICKS = 1          # 1-tick bid/ask spread
     _DOM_LEVELS = 5
-    _BURST_PROB = 0.02          # probability of entering burst mode each tick
-    _BURST_DURATION = (10, 40)  # burst lasts 10-40 ticks
+    _BURST_PROB = 0.015         # probability of entering burst mode each tick
+    _BURST_DURATION = (5, 15)   # burst lasts 5-15 ticks
     _LARGE_TRADE_PROB = 0.005   # probability of a block trade each tick
     _LARGE_TRADE_SIZE = (20, 100)
 
     def __init__(self, config: RithmicConfig, event_bus: EventBus,
                  start_price: float = 5000.0,
                  tick_size: float = 0.25,
-                 tick_interval_ms: int = 100) -> None:
+                 tick_interval_ms: int = 250) -> None:
         self._config = config
         self._bus = event_bus
         self._base_price = start_price
@@ -589,7 +589,7 @@ class SimulatedRithmicFeed(RithmicCallbacks):
                     burst_remaining = random.randint(*self._BURST_DURATION)
                 if burst_remaining > 0:
                     burst_remaining -= 1
-                    interval = 0.020   # 20 ms during burst
+                    interval = 0.080   # 80 ms during burst
                 else:
                     interval = self._tick_interval_ms / 1000.0
 

@@ -28,10 +28,13 @@ class AnimatedValue:
     def set_target(self, value: float):
         self._target = value
 
-    def tick(self) -> float:
+    def tick(self) -> bool:
+        """Advance animation one step. Returns True if value changed visibly."""
         diff = self._target - self._current
+        if abs(diff) < 0.001:
+            return False
         self._current += diff * self._speed
-        return self._current
+        return True
 
     @property
     def value(self) -> float:
@@ -93,13 +96,17 @@ class NeonLineChart(QWidget):
 
         self._anim_timer = QTimer(self)
         self._anim_timer.timeout.connect(self._tick_anim)
-        self._anim_timer.start(33)
+        self._anim_timer.start(100)
 
     def _tick_anim(self):
+        changed = False
         for av in self._anim_values:
-            av.tick()
-        self._hover_anim.tick()
-        self.update()
+            if av.tick():
+                changed = True
+        if self._hover_anim.tick():
+            changed = True
+        if changed:
+            self.update()
 
     def set_data(self, data: List[Tuple[float, float]]):
         """Primary series. data = list of (x, y)."""

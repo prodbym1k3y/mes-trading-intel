@@ -61,7 +61,7 @@ class TickingNumber(QLabel):
         self._animating = False
 
         self._timer = QTimer(self)
-        self._timer.setInterval(16)
+        self._timer.setInterval(50)
         self._timer.timeout.connect(self._tick)
 
     def set_value(self, v: float):
@@ -198,7 +198,7 @@ class ArcGauge(QWidget):
         self._value = 50.0
         self._display = 50.0
         self._timer = QTimer(self)
-        self._timer.setInterval(16)
+        self._timer.setInterval(50)
         self._timer.timeout.connect(self._tick)
         self.setMinimumSize(90, 68)
         self.setMaximumSize(160, 110)
@@ -492,9 +492,9 @@ class StrategyWeightPie(QWidget):
         self._weights: dict[str, float] = {}
         self._phase = 0.0
         self._timer = QTimer(self)
-        self._timer.timeout.connect(lambda: (setattr(self, '_phase', (self._phase + 0.03) % (2 * math.pi)),
+        self._timer.timeout.connect(lambda: (setattr(self, '_phase', (self._phase + 0.06) % (2 * math.pi)),
                                              self.update()))
-        self._timer.start(50)
+        self._timer.start(150)
         self.setMinimumSize(120, 120)
 
     def set_weights(self, weights: dict[str, float]):
@@ -736,7 +736,7 @@ class ADXMeter(QWidget):
         self._value = 0.0
         self._display = 0.0
         self._timer = QTimer(self)
-        self._timer.setInterval(16)
+        self._timer.setInterval(50)
         self._timer.timeout.connect(self._tick)
         self.setMinimumSize(80, 32)
         self.setMaximumHeight(48)
