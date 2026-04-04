@@ -256,6 +256,21 @@ def main():
     except Exception as exc:
         log.warning("Cross-asset feed failed to start: %s", exc)
 
+    # Start news scanner streaming (Finnhub WebSocket + RSS feeds)
+    try:
+        news_scanner.start_streaming()
+        log.info("News scanner streaming started")
+    except Exception as exc:
+        log.warning("News scanner streaming failed: %s", exc)
+
+    # Start dark pool monitoring
+    if dark_pool_agent is not None:
+        try:
+            dark_pool_agent.start_monitoring()
+            log.info("Dark pool monitoring started")
+        except Exception as exc:
+            log.warning("Dark pool monitoring failed: %s", exc)
+
     # Initialize ML trainer (Phase 2)
     ml_trainer = None
     try:

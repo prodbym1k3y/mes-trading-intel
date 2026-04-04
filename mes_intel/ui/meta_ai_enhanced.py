@@ -1209,7 +1209,15 @@ class MetaAIDashboard(QWidget):
                 lessons = tracker.lessons_learned
                 reward_vals = [r for r in list(tracker.recent_rewards)[-20:]]
                 avg_r = sum(reward_vals) / len(reward_vals) if reward_vals else 0.0
-                acc_history = [tracker.accuracy] * 10  # placeholder
+                # Build accuracy history from recent_correct
+                rc = tracker.recent_correct[-50:]
+                if len(rc) >= 10:
+                    acc_history = [
+                        sum(rc[max(0, i - 5):i + 1]) / min(i + 1, 5)
+                        for i in range(0, len(rc), 5)
+                    ][-10:]
+                else:
+                    acc_history = [tracker.accuracy] * min(10, max(1, len(rc)))
             else:
                 # Non-strategy agent — use agent_knowledge_scores
                 k_name = agent_lower
