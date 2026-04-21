@@ -104,6 +104,9 @@ class EventType(Enum):
     UI_USAGE_EVENT = auto()         # user interaction tracked (tab viewed, feature clicked, etc.)
     OPTIMIZATION_SUGGESTION = auto()  # optimizer recommends a UI or weight change
 
+    # Autonomous Optimizer
+    AUTONOMY_POLICY_CHANGED = auto()  # autonomous parameter change applied, validated, or rolled back
+
 
 @dataclass
 class Event:

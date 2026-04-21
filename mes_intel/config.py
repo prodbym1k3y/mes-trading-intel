@@ -5,7 +5,6 @@ import json
 import os
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Optional
 
 
 CONFIG_DIR = Path(__file__).parent.parent / "var" / "mes_intel"
@@ -78,6 +77,8 @@ class SignalConfig:
     min_strategies_agree: int = 3     # minimum strategies that must agree
     min_confidence: float = 0.70      # minimum ensemble confidence to signal
     signal_cooldown_sec: int = 120    # seconds between signals
+    eval_interval_ms: int = 15000     # timer interval for strategy evaluation
+    skip_duplicate_snapshots: bool = True
 
     # Strategy weights (auto-adjusted by meta-learner)
     weights: dict = field(default_factory=lambda: {
@@ -144,6 +145,60 @@ class DarkPoolConfig:
 
 
 @dataclass
+class CrossAssetConfig:
+    price_interval_sec: int = 30
+    options_interval_sec: int = 300
+    off_hours_price_interval_sec: int = 300
+    off_hours_options_interval_sec: int = 900
+
+
+@dataclass
+class AutonomyConfig:
+    enabled: bool = True
+    paper_mode_only: bool = True
+    check_interval_sec: int = 3600
+    min_closed_trades: int = 12
+    min_context_closed_trades: int = 6
+    validation_min_closed_trades: int = 8
+    min_confidence_floor: float = 0.65
+    min_confidence_ceiling: float = 0.85
+    confidence_step_up: float = 0.02
+    confidence_step_down: float = 0.01
+    eval_interval_step_ms: int = 5000
+    min_eval_interval_ms: int = 5000
+    max_eval_interval_ms: int = 60000
+    # min_strategies_agree tuning
+    min_strategies_agree_floor: int = 2
+    min_strategies_agree_ceiling: int = 6
+    # signal_cooldown_sec tuning
+    cooldown_floor_sec: int = 60
+    cooldown_ceiling_sec: int = 600
+    cooldown_step_sec: int = 30
+    # gradual policy decay
+    policy_fade_start_fraction: float = 0.7  # fade starts at this fraction of decay window
+    rollback_win_rate_drop: float = 0.08
+    rollback_avg_pnl_drop: float = 25.0
+    regime_confidence_bounds: dict = field(default_factory=lambda: {
+        "trending": [0.60, 0.82],
+        "ranging": [0.68, 0.88],
+        "volatile": [0.72, 0.90],
+        "quiet": [0.64, 0.84],
+        "breakout": [0.62, 0.86],
+        "unknown": [0.65, 0.85],
+    })
+    regime_eval_interval_bounds_ms: dict = field(default_factory=lambda: {
+        "trending": [5000, 30000],
+        "ranging": [10000, 45000],
+        "volatile": [12000, 60000],
+        "quiet": [8000, 45000],
+        "breakout": [5000, 30000],
+        "unknown": [5000, 60000],
+    })
+    weekly_report_weekday: int = 6
+    policy_decay_days: int = 7  # days of inactivity before a context policy is discarded
+
+
+@dataclass
 class MLConfig:
     model_dir: str = str(CONFIG_DIR / "models")
     retrain_threshold: float = 0.55
@@ -176,8 +231,8 @@ class UIConfig:
     sound_enabled: bool = True
     sound_volume: float = 0.7
     layout_file: str = str(CONFIG_DIR / "layout.json")
-    particle_effects: bool = True
-    animations_enabled: bool = True
+    particle_effects: bool = False
+    animations_enabled: bool = False
 
 
 @dataclass
@@ -188,7 +243,9 @@ class AppConfig:
     signals: SignalConfig = field(default_factory=SignalConfig)
     news: NewsConfig = field(default_factory=NewsConfig)
     dark_pool: DarkPoolConfig = field(default_factory=DarkPoolConfig)
+    cross_asset: CrossAssetConfig = field(default_factory=CrossAssetConfig)
     ml: MLConfig = field(default_factory=MLConfig)
+    autonomy: AutonomyConfig = field(default_factory=AutonomyConfig)
     ui_config: UIConfig = field(default_factory=UIConfig)
     amp_sync: AmpSyncConfig = field(default_factory=AmpSyncConfig)
 
@@ -206,7 +263,7 @@ class AppConfig:
 
     def save(self):
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        with open(CONFIG_FILE, "w") as f:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(asdict(self), f, indent=2)
 
     @classmethod
@@ -215,7 +272,7 @@ class AppConfig:
 
         # Load from config file
         if CONFIG_FILE.exists():
-            with open(CONFIG_FILE) as f:
+            with open(CONFIG_FILE, encoding="utf-8") as f:
                 data = json.load(f)
             cfg = cls._from_dict(data)
 
@@ -246,10 +303,18 @@ class AppConfig:
             for k, v in data["dark_pool"].items():
                 if hasattr(cfg.dark_pool, k):
                     setattr(cfg.dark_pool, k, v)
+        if "cross_asset" in data:
+            for k, v in data["cross_asset"].items():
+                if hasattr(cfg.cross_asset, k):
+                    setattr(cfg.cross_asset, k, v)
         if "ml" in data:
             for k, v in data["ml"].items():
                 if hasattr(cfg.ml, k):
                     setattr(cfg.ml, k, v)
+        if "autonomy" in data:
+            for k, v in data["autonomy"].items():
+                if hasattr(cfg.autonomy, k):
+                    setattr(cfg.autonomy, k, v)
         if "ui_config" in data:
             for k, v in data["ui_config"].items():
                 if hasattr(cfg.ui_config, k):
@@ -282,7 +347,7 @@ class AppConfig:
         # Existing trade_journal settings.json
         tj_settings = Path(__file__).parent.parent / "trade_journal" / "settings.json"
         if tj_settings.exists():
-            with open(tj_settings) as f:
+            with open(tj_settings, encoding="utf-8") as f:
                 tj = json.load(f)
             if not self.rithmic.user and tj.get("rithmic_user"):
                 self.rithmic.user = tj["rithmic_user"]

@@ -20,8 +20,6 @@ from __future__ import annotations
 import sqlite3
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass, field
-from datetime import datetime, date
 from pathlib import Path
 from typing import Optional
 
@@ -58,7 +56,27 @@ def _migrate(conn):
         if col not in existing_trades:
             try:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {dtype}")
-            except Exception:
+            except sqlite3.OperationalError:
+                pass
+
+    autonomy_cols = [
+        ("context_key", "TEXT DEFAULT 'global'"),
+        ("validation_status", "TEXT DEFAULT 'pending'"),
+        ("validation_checked_at", "REAL"),
+        ("validation_notes", "TEXT DEFAULT ''"),
+        ("reverted", "INTEGER DEFAULT 0"),
+        ("reverted_at", "REAL"),
+        ("revert_notes", "TEXT DEFAULT ''"),
+    ]
+    existing_autonomy = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(autonomous_changes)").fetchall()
+    }
+    for col, dtype in autonomy_cols:
+        if col not in existing_autonomy:
+            try:
+                conn.execute(f"ALTER TABLE autonomous_changes ADD COLUMN {col} {dtype}")
+            except sqlite3.OperationalError:
                 pass
 
     # Ensure learning tables exist (idempotent)
@@ -67,6 +85,8 @@ def _migrate(conn):
     conn.executescript(PHASE4_SCHEMA)
     # Ensure AI chat history table exists (idempotent)
     conn.executescript(AI_CHAT_SCHEMA)
+    # Ensure autonomous optimization tables exist (idempotent)
+    conn.executescript(AUTONOMY_SCHEMA)
 
 
 @contextmanager
@@ -418,7 +438,7 @@ class Database:
                 d = dict(r)
                 try:
                     d["value"] = _json.loads(d["value_json"])
-                except Exception:
+                except _json.JSONDecodeError:
                     d["value"] = {}
                 result.append(d)
             return result
@@ -691,6 +711,96 @@ class Database:
             else:
                 rows = c.execute(
                     "SELECT * FROM agent_accuracy ORDER BY last_updated DESC"
+                ).fetchall()
+            return [dict(r) for r in rows]
+
+    # --- Autonomous Optimization (Phase 1) ---
+
+    def insert_autonomous_change(self, change: dict) -> int:
+        change = {
+            "context_key": "global",
+            **change,
+        }
+        with self.conn() as c:
+            cur = c.execute(
+                """
+                INSERT INTO autonomous_changes (
+                    timestamp, change_type, target, old_value, new_value,
+                    rationale, metric_snapshot_json, applied, rollout_mode,
+                    context_key
+                )
+                VALUES (
+                    :timestamp, :change_type, :target, :old_value, :new_value,
+                    :rationale, :metric_snapshot_json, :applied, :rollout_mode,
+                    :context_key
+                )
+                """,
+                change,
+            )
+            return cur.lastrowid
+
+    def get_autonomous_changes(self, limit: int = 100) -> list[dict]:
+        with self.conn() as c:
+            rows = c.execute(
+                "SELECT * FROM autonomous_changes ORDER BY timestamp DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_pending_autonomous_changes(self) -> list[dict]:
+        with self.conn() as c:
+            rows = c.execute(
+                "SELECT * FROM autonomous_changes "
+                "WHERE applied=1 AND COALESCE(reverted, 0)=0 "
+                "AND COALESCE(validation_status, 'pending') IN ('pending', 'monitoring') "
+                "ORDER BY timestamp ASC"
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def update_autonomous_change(self, change_id: int, updates: dict) -> None:
+        with self.conn() as c:
+            sets = ", ".join(f"{key}=?" for key in updates)
+            c.execute(
+                f"UPDATE autonomous_changes SET {sets} WHERE id=?",
+                (*updates.values(), change_id),
+            )
+
+    def get_closed_trades_since(self, timestamp: float, limit: int = 200) -> list[dict]:
+        with self.conn() as c:
+            rows = c.execute(
+                "SELECT * FROM trades WHERE status='closed' "
+                "AND datetime(created_at) >= datetime(?, 'unixepoch') "
+                "ORDER BY created_at DESC LIMIT ?",
+                (timestamp, limit),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def insert_autonomy_report(self, report: dict) -> int:
+        with self.conn() as c:
+            cur = c.execute(
+                """
+                INSERT INTO autonomy_reports (
+                    timestamp, report_type, period_key, summary_json
+                )
+                VALUES (:timestamp, :report_type, :period_key, :summary_json)
+                """,
+                report,
+            )
+            return cur.lastrowid
+
+    def get_autonomy_reports(self, report_type: Optional[str] = None,
+                              limit: int = 30) -> list[dict]:
+        with self.conn() as c:
+            if report_type:
+                rows = c.execute(
+                    "SELECT * FROM autonomy_reports WHERE report_type=? "
+                    "ORDER BY timestamp DESC LIMIT ?",
+                    (report_type, limit),
+                ).fetchall()
+            else:
+                rows = c.execute(
+                    "SELECT * FROM autonomy_reports ORDER BY timestamp DESC LIMIT ?",
+                    (limit,),
                 ).fetchall()
             return [dict(r) for r in rows]
 
@@ -1050,5 +1160,42 @@ CREATE TABLE IF NOT EXISTS chat_history (
 
 CREATE INDEX IF NOT EXISTS idx_chat_history_ts ON chat_history(timestamp);
 CREATE INDEX IF NOT EXISTS idx_chat_history_role ON chat_history(role);
+"""
+
+AUTONOMY_SCHEMA = """
+CREATE TABLE IF NOT EXISTS autonomous_changes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp REAL NOT NULL,
+    change_type TEXT NOT NULL,
+    target TEXT NOT NULL,
+    old_value TEXT NOT NULL DEFAULT '',
+    new_value TEXT NOT NULL DEFAULT '',
+    rationale TEXT NOT NULL DEFAULT '',
+    metric_snapshot_json TEXT NOT NULL DEFAULT '{}',
+    applied INTEGER NOT NULL DEFAULT 0,
+    rollout_mode TEXT NOT NULL DEFAULT 'paper',
+    context_key TEXT NOT NULL DEFAULT 'global',
+    validation_status TEXT NOT NULL DEFAULT 'pending',
+    validation_checked_at REAL,
+    validation_notes TEXT NOT NULL DEFAULT '',
+    reverted INTEGER NOT NULL DEFAULT 0,
+    reverted_at REAL,
+    revert_notes TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS autonomy_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp REAL NOT NULL,
+    report_type TEXT NOT NULL,
+    period_key TEXT NOT NULL,
+    summary_json TEXT NOT NULL DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_autonomous_changes_ts ON autonomous_changes(timestamp);
+CREATE INDEX IF NOT EXISTS idx_autonomous_changes_target ON autonomous_changes(target);
+CREATE INDEX IF NOT EXISTS idx_autonomy_reports_type ON autonomy_reports(report_type);
+CREATE INDEX IF NOT EXISTS idx_autonomy_reports_period ON autonomy_reports(period_key);
 """
 

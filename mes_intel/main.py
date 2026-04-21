@@ -27,6 +27,7 @@ def main():
     from .config import AppConfig
     from .database import Database
     from .event_bus import bus, EventType, Event
+    from .autonomy import AutonomousOptimizer
 
     config = AppConfig.load()
     config.save()  # persist defaults
@@ -173,7 +174,9 @@ def main():
     log.info("Phase 4: Market Brain + App Optimizer initialized")
 
     # Wire brain into signal engine for pattern-based boosting/suppression
-    signal_engine._meta_learner = meta_learner
+    signal_engine.set_meta_learner(meta_learner)
+
+    autonomous_optimizer = AutonomousOptimizer(config, db, bus)
 
     agents = [signal_engine, trade_journal, chart_monitor, meta_learner,
               news_scanner, market_brain, app_optimizer]
@@ -248,7 +251,11 @@ def main():
             if data.get('gex'):
                 bus.publish(Event(type=EventType.OPTIONS_DATA_UPDATE, data=data.get('gex', {}), source='cross_asset_feed'))
 
-        cross_asset_feed = CrossAssetFeed(callback=_on_cross_asset, alpaca_feed=alpaca_feed)
+        cross_asset_feed = CrossAssetFeed(
+            callback=_on_cross_asset,
+            alpaca_feed=alpaca_feed,
+            config=config,
+        )
         cross_asset_feed.start()
         chart_monitor.set_cross_asset_feed(cross_asset_feed)
         src = "Alpaca live + yfinance" if alpaca_feed else "yfinance 5m"
@@ -306,7 +313,7 @@ def main():
 
     eval_timer = QTimer()
     eval_timer.timeout.connect(_evaluate_signals)
-    eval_timer.start(5000)
+    eval_timer.start(config.signals.eval_interval_ms)
 
     # Periodic ML model evaluation (every 5 minutes — check if retrain needed)
     def _check_ml_retrain():
@@ -382,6 +389,45 @@ def main():
     catalyst_timer = QTimer()
     catalyst_timer.timeout.connect(_premarket_scan)
     catalyst_timer.start(1_800_000)
+
+    def _run_autonomous_optimization():
+        try:
+            runtime_policy = autonomous_optimizer.maybe_apply_runtime_context_policy()
+            validation = autonomous_optimizer.maybe_validate_recent_changes()
+            summary = autonomous_optimizer.maybe_run_daily_optimization()
+            weekly = autonomous_optimizer.maybe_run_weekly_drift_report()
+            if runtime_policy.get("status") == "completed" and runtime_policy.get("applied"):
+                eval_timer.start(config.signals.eval_interval_ms)
+                log.info(
+                    "Applied runtime context policy %s | min_conf=%.2f eval_ms=%d",
+                    runtime_policy.get("context", "unknown"),
+                    config.signals.min_confidence,
+                    config.signals.eval_interval_ms,
+                )
+            if validation.get("status") == "completed":
+                log.info(
+                    "Autonomy validation checked=%d validated=%d rolled_back=%d",
+                    validation.get("checked", 0),
+                    validation.get("validated", 0),
+                    validation.get("rolled_back", 0),
+                )
+            if summary.status == "completed":
+                log.info(
+                    "Autonomous optimizer applied %d change(s) | win_rate=%.2f | net_pnl=%.2f",
+                    len(summary.changes),
+                    summary.metrics.get("win_rate", 0.0),
+                    summary.metrics.get("net_pnl", 0.0),
+                )
+                eval_timer.start(config.signals.eval_interval_ms)
+            if weekly.get("status") == "completed":
+                log.info("Weekly drift report generated for %s", weekly.get("period_key", ""))
+        except Exception:
+            log.exception("Autonomous optimization cycle failed")
+
+    autonomy_timer = QTimer()
+    autonomy_timer.timeout.connect(_run_autonomous_optimization)
+    autonomy_timer.start(config.autonomy.check_interval_sec * 1000)
+    QTimer.singleShot(5000, _run_autonomous_optimization)
 
     # Wire advanced order flow alerts into signals feed
     def _on_orderflow_alert(event: Event):

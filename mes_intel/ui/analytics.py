@@ -5,6 +5,7 @@ Equity curve, drawdown, strategy performance, ML metrics, correlation heatmap
 from __future__ import annotations
 
 import math
+import json
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -13,7 +14,7 @@ from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView,
-    QSizePolicy, QGridLayout, QScrollArea, QPushButton, QSplitter,
+    QSizePolicy, QGridLayout, QScrollArea, QPushButton, QSplitter, QTextEdit,
 )
 from PySide6.QtCore import Qt, QTimer, QRectF, QPointF, Signal as QtSignal
 from PySide6.QtGui import (
@@ -85,6 +86,13 @@ def _get_attr(t, attr: str, default=None):
     if isinstance(t, dict):
         return t.get(attr, default)
     return default
+
+
+def _fmt_ts(ts: float) -> str:
+    try:
+        return datetime.fromtimestamp(float(ts)).strftime("%Y-%m-%d %H:%M")
+    except (TypeError, ValueError, OSError):
+        return "-"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1525,6 +1533,167 @@ class _PaintWidget(QWidget):
         painter.end()
 
 
+class AutonomyInsightsWidget(QWidget):
+    """Autonomy dashboard for optimizer activity, validation, and reports."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(4, 4, 4, 4)
+        root.setSpacing(6)
+
+        hdr = QLabel("AUTONOMY INSIGHTS")
+        hdr.setStyleSheet(f"color: {CYAN}; font-size: 11px; font-weight: bold;")
+        root.addWidget(hdr)
+
+        summary_row = QHBoxLayout()
+        self._summary_lbl = QLabel("Total: 0  Pending: 0  Validated: 0  RolledBack: 0")
+        self._summary_lbl.setStyleSheet(f"color: {WHITE}; font-size: 10px;")
+        summary_row.addWidget(self._summary_lbl)
+        summary_row.addStretch()
+        root.addLayout(summary_row)
+
+        self._active_lbl = QLabel("Active Context: -")
+        self._active_lbl.setStyleSheet(f"color: {GREEN}; font-size: 10px;")
+        root.addWidget(self._active_lbl)
+
+        self._policy_lbl = QLabel("Runtime Policy: -")
+        self._policy_lbl.setStyleSheet(f"color: {DIM}; font-size: 10px;")
+        root.addWidget(self._policy_lbl)
+
+        self._changes = QTableWidget()
+        self._changes.setColumnCount(8)
+        self._changes.setHorizontalHeaderLabels([
+            "Time", "Context", "Target", "Old", "New", "Validation", "Reverted", "Rationale",
+        ])
+        self._changes.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self._changes.verticalHeader().setVisible(False)
+        self._changes.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._changes.setAlternatingRowColors(True)
+        self._changes.setMinimumHeight(180)
+        root.addWidget(self._changes, 2)
+
+        rep_hdr = QLabel("RECENT AUTONOMY REPORTS")
+        rep_hdr.setStyleSheet(f"color: {MAGENTA}; font-size: 10px; font-weight: bold;")
+        root.addWidget(rep_hdr)
+
+        self._reports = QTableWidget()
+        self._reports.setColumnCount(4)
+        self._reports.setHorizontalHeaderLabels(["Time", "Type", "Period", "Summary"])
+        self._reports.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self._reports.verticalHeader().setVisible(False)
+        self._reports.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._reports.setMinimumHeight(120)
+        root.addWidget(self._reports, 1)
+
+        self._notes = QTextEdit()
+        self._notes.setReadOnly(True)
+        self._notes.setMinimumHeight(70)
+        self._notes.setStyleSheet(
+            f"background: {BG_PANEL}; color: {DIM}; border: 1px solid {BORDER};"
+        )
+        root.addWidget(self._notes)
+
+    def update_data(self, db) -> None:
+        if db is None:
+            return
+        changes = db.get_autonomous_changes(limit=40)
+        pending = db.get_pending_autonomous_changes()
+        reports = db.get_autonomy_reports(limit=10)
+        state_rows = db.get_agent_knowledge("AutonomousOptimizer", "optimizer_state")
+
+        active_state = {}
+        policy_map = {}
+        for row in state_rows:
+            key = row.get("key")
+            value = row.get("value", {})
+            if key == "active_runtime_context" and isinstance(value, dict):
+                active_state = value
+            elif key == "context_policy_map" and isinstance(value, dict):
+                policy_map = value
+
+        validated = sum(1 for c in changes if c.get("validation_status") == "validated")
+        rolled_back = sum(1 for c in changes if int(c.get("reverted") or 0) == 1)
+        self._summary_lbl.setText(
+            f"Total: {len(changes)}  Pending: {len(pending)}  "
+            f"Validated: {validated}  RolledBack: {rolled_back}"
+        )
+
+        context = active_state.get("context", "-")
+        policy = active_state.get("policy", {}) if isinstance(active_state.get("policy", {}), dict) else {}
+        p_conf = policy.get("min_confidence")
+        p_eval = policy.get("eval_interval_ms")
+        p_agree = policy.get("min_strategies_agree")
+        p_cool = policy.get("signal_cooldown_sec")
+        p_conf_txt = f"{float(p_conf):.3f}" if p_conf is not None else "-"
+        p_eval_txt = str(int(p_eval)) if p_eval is not None else "-"
+        p_agree_txt = str(int(p_agree)) if p_agree is not None else "-"
+        p_cool_txt = str(int(p_cool)) if p_cool is not None else "-"
+        self._active_lbl.setText(f"Active Context: {context}")
+        self._policy_lbl.setText(
+            f"Runtime Policy: min_confidence={p_conf_txt}  "
+            f"eval_interval_ms={p_eval_txt}  min_strategies_agree={p_agree_txt}  "
+            f"cooldown_sec={p_cool_txt}"
+        )
+
+        self._changes.setRowCount(len(changes))
+        for r, change in enumerate(changes):
+            row_vals = [
+                _fmt_ts(change.get("timestamp", 0.0)),
+                str(change.get("context_key") or "global"),
+                str(change.get("target") or "-"),
+                str(change.get("old_value") or "-"),
+                str(change.get("new_value") or "-"),
+                str(change.get("validation_status") or "pending"),
+                "YES" if int(change.get("reverted") or 0) == 1 else "NO",
+                str(change.get("rationale") or "-")[:120],
+            ]
+            for c, val in enumerate(row_vals):
+                item = QTableWidgetItem(val)
+                if c == 5:
+                    status = val.lower()
+                    if status == "validated":
+                        item.setForeground(QColor(GREEN))
+                    elif status == "monitoring":
+                        item.setForeground(QColor(AMBER))
+                    elif status == "pending":
+                        item.setForeground(QColor(CYAN))
+                    else:
+                        item.setForeground(QColor(RED))
+                self._changes.setItem(r, c, item)
+
+        self._reports.setRowCount(len(reports))
+        for r, report in enumerate(reports):
+            summary = ""
+            raw = str(report.get("summary_json") or "")
+            if raw:
+                try:
+                    parsed = json.loads(raw)
+                    summary = (
+                        f"changes={parsed.get('recent_change_count', 0)} "
+                        f"pending={parsed.get('pending_change_count', 0)}"
+                    )
+                except json.JSONDecodeError:
+                    summary = raw[:140]
+
+            for c, val in enumerate([
+                _fmt_ts(report.get("timestamp", 0.0)),
+                str(report.get("report_type") or "-"),
+                str(report.get("period_key") or "-"),
+                summary or "-",
+            ]):
+                self._reports.setItem(r, c, QTableWidgetItem(val))
+
+        note_lines = [
+            f"Context policies tracked: {len(policy_map)}",
+            f"Last refresh: {_fmt_ts(time.time())}",
+        ]
+        if context and context != "-":
+            note_lines.append(f"Current context key: {context}")
+        self._notes.setPlainText("\n".join(note_lines))
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # AnalyticsDashboard — main widget
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1631,6 +1800,14 @@ class AnalyticsDashboard(QWidget):
         heatmap_l.addWidget(self.pnl_heatmap)
         self._tabs.addTab(heatmap_w, "HEATMAP")
 
+        # AUTONOMY tab — policy state, recent changes, weekly reports
+        autonomy_w = QWidget()
+        autonomy_l = QVBoxLayout(autonomy_w)
+        autonomy_l.setContentsMargins(4, 4, 4, 4)
+        self.autonomy_insights = AutonomyInsightsWidget()
+        autonomy_l.addWidget(self.autonomy_insights)
+        self._tabs.addTab(autonomy_w, "AUTONOMY")
+
         # Event bus subscriptions
         bus.subscribe(EventType.TRADE_CLOSED,       self._on_trade_closed)
         bus.subscribe(EventType.WEIGHT_ADJUSTMENT,  self._on_weight_adj)
@@ -1689,6 +1866,9 @@ class AnalyticsDashboard(QWidget):
                     self.ml_perf.update_data(perf)
                 except TypeError:
                     pass  # method signature may vary
+
+            if hasattr(self, "autonomy_insights"):
+                self.autonomy_insights.update_data(self._db)
         except Exception as exc:
             print(f"[AnalyticsDashboard] refresh_all error: {exc}")
 

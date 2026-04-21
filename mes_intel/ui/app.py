@@ -298,12 +298,18 @@ class MainWindow(QMainWindow):
             f"color: {COLORS['pink']}; font-weight: bold; " + _sb_base
         )
 
+        self._autonomy_label = QLabel("AUTO: --")
+        self._autonomy_label.setStyleSheet(f"color: {COLORS['text_muted']}; " + _sb_base)
+        self._autonomy_label.setToolTip("Last autonomous parameter change")
+        self._autonomy_sb_base = _sb_base
+
         self.status_bar.addPermanentWidget(self._phx_time_label)
         self.status_bar.addPermanentWidget(self._agents_label)
         self.status_bar.addPermanentWidget(self._signals_count_label)
         self.status_bar.addPermanentWidget(self._pnl_status_label)
         self.status_bar.addPermanentWidget(self._cum_pnl_label)
         self.status_bar.addPermanentWidget(self._conn_label)
+        self.status_bar.addPermanentWidget(self._autonomy_label)
         self.status_bar.addPermanentWidget(self._clock_label)
 
     def _build_header(self) -> QFrame:
@@ -685,6 +691,8 @@ class MainWindow(QMainWindow):
             self.bus.subscribe(EventType.OPTIONS_DATA_UPDATE, self._on_cross_asset_update)
         except Exception:
             pass
+        # Autonomy: update status bar badge on every policy event
+        self.bus.subscribe(EventType.AUTONOMY_POLICY_CHANGED, self._on_autonomy_policy_changed)
 
     def _start_timers(self):
         """Start UI refresh timers."""
@@ -1215,6 +1223,28 @@ class MainWindow(QMainWindow):
             desc = event.data.get("description", "")
             if desc and hasattr(self, '_optimizer_panel'):
                 self._optimizer_panel.refresh()
+        except Exception:
+            pass
+
+    def _on_autonomy_policy_changed(self, event: Event):
+        """Update the AUTO: status bar badge when a parameter policy changes."""
+        try:
+            action = event.data.get("action", "")
+            base   = getattr(self, "_autonomy_sb_base", "padding: 0 6px;")
+            if action == "applied":
+                count = event.data.get("change_count", 0)
+                ctx   = str(event.data.get("context", "?"))[:10]
+                self._autonomy_label.setText(f"AUTO: \u25b2{count} [{ctx}]")
+                self._autonomy_label.setStyleSheet(f"color: {COLORS['green_bright']}; " + base)
+            elif action == "rolled_back":
+                raw    = str(event.data.get("target", "?"))
+                target = raw.split(".")[-1]
+                self._autonomy_label.setText(f"AUTO: \u21a9{target}")
+                self._autonomy_label.setStyleSheet(f"color: {COLORS['pink']}; " + base)
+            elif action == "decayed":
+                removed = event.data.get("removed_count", 0)
+                self._autonomy_label.setText(f"AUTO: \u2193{removed} exp")
+                self._autonomy_label.setStyleSheet(f"color: {COLORS['text_muted']}; " + base)
         except Exception:
             pass
 

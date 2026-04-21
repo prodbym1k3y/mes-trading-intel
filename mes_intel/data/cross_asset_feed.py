@@ -11,7 +11,9 @@ import math
 import threading
 import time
 import warnings
+from datetime import datetime
 from typing import Callable, Optional
+from zoneinfo import ZoneInfo
 
 import numpy as np
 
@@ -361,12 +363,13 @@ def _vix_regime(vix: float) -> tuple[str, str]:
 class CrossAssetFeed:
     """Background thread that polls cross-asset prices and SPY options GEX."""
 
-    PRICE_INTERVAL = 30    # seconds — real-time intraday (5m bars, ~15min delayed free data)
-    OPTIONS_INTERVAL = 180  # 3 minutes — options chain for GEX levels
+    PRICE_INTERVAL = 30
+    OPTIONS_INTERVAL = 300
 
-    def __init__(self, callback: Callable[[str, dict], None], alpaca_feed=None):
+    def __init__(self, callback: Callable[[str, dict], None], alpaca_feed=None, config=None):
         self._callback = callback
         self._alpaca = alpaca_feed  # optional AlpacaFeed for real-time prices
+        self._config = config
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -426,8 +429,9 @@ class CrossAssetFeed:
         """Main polling loop."""
         while not self._stop_event.is_set():
             now = time.time()
-            do_prices = (now - self._last_price_fetch) >= self.PRICE_INTERVAL
-            do_options = (now - self._last_options_fetch) >= self.OPTIONS_INTERVAL
+            price_interval, options_interval = self._current_intervals()
+            do_prices = (now - self._last_price_fetch) >= price_interval
+            do_options = (now - self._last_options_fetch) >= options_interval
 
             if do_prices:
                 self._fetch_prices()
@@ -439,6 +443,26 @@ class CrossAssetFeed:
                 self._emit()
 
             self._stop_event.wait(timeout=10)
+
+    def _current_intervals(self) -> tuple[int, int]:
+        if self._config is None:
+            return self.PRICE_INTERVAL, self.OPTIONS_INTERVAL
+
+        if self._is_rth_session():
+            return (
+                self._config.cross_asset.price_interval_sec,
+                self._config.cross_asset.options_interval_sec,
+            )
+
+        return (
+            self._config.cross_asset.off_hours_price_interval_sec,
+            self._config.cross_asset.off_hours_options_interval_sec,
+        )
+
+    def _is_rth_session(self) -> bool:
+        now = datetime.now(tz=ZoneInfo("America/Phoenix"))
+        minutes = now.hour * 60 + now.minute
+        return 390 <= minutes < 840
 
     # ------------------------------------------------------------------
     # Price fetching

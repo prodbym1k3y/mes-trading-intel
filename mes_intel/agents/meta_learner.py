@@ -256,6 +256,7 @@ class MetaLearner:
         self.bus.subscribe(EventType.BREAKING_NEWS, self._on_news_event)
         self.bus.subscribe(EventType.MARKET_REGIME_CHANGE, self._on_market_regime_change)
         self.bus.subscribe(EventType.QUANT_SIGNAL, self._on_quant_signal)
+        self.bus.subscribe(EventType.AUTONOMY_POLICY_CHANGED, self._on_autonomy_policy_changed)
 
         # Phase 4: Bayesian agent weight priors and per-regime accuracy
         self.bayesian_weights: dict[str, float] = {
@@ -1364,6 +1365,49 @@ class MetaLearner:
         regime = event.data.get("regime", "unknown")
         if regime and regime != "unknown":
             self._current_regime = regime
+
+    def _on_autonomy_policy_changed(self, event: Event):
+        """Log autonomy parameter changes into communication_log for META-AI tab visibility."""
+        action = event.data.get("action", "")
+        if action == "applied":
+            ctx = event.data.get("context", "unknown")
+            changes = event.data.get("changes", [])
+            metrics = event.data.get("metrics", {})
+            wr = metrics.get("win_rate", 0.0)
+            for ch in changes:
+                target = ch.get("target", "?")
+                old_v  = ch.get("old_value", "?")
+                new_v  = ch.get("new_value", "?")
+                reason = ch.get("reason", "")
+                self._publish_lesson_learned(
+                    "autonomy_applied",
+                    "autonomy_optimizer",
+                    "signal_engine",
+                    f"[{ctx}] {target}: {old_v}\u2192{new_v} (win_rate={wr:.1%}). {reason}",
+                    impact_score=abs(wr - 0.5),
+                )
+        elif action == "rolled_back":
+            target = event.data.get("target", "?")
+            reason = event.data.get("reason", "")
+            self._publish_lesson_learned(
+                "autonomy_rolled_back",
+                "autonomy_optimizer",
+                "signal_engine",
+                f"Rollback {target} \u2014 {reason}",
+                impact_score=0.3,
+            )
+        elif action == "decayed":
+            removed  = event.data.get("removed_count", 0)
+            contexts = event.data.get("contexts", [])
+            if removed:
+                self._publish_lesson_learned(
+                    "autonomy_decayed",
+                    "autonomy_optimizer",
+                    "all",
+                    f"Expired {removed} stale context polic{'y' if removed == 1 else 'ies'}: "
+                    f"{', '.join(str(c) for c in contexts[:3])}",
+                    impact_score=0.1,
+                )
 
     def _check_team_meeting(self, trade_id: int, pnl: float, outcome: str):
         """Hold a team meeting every TEAM_MEETING_INTERVAL trades."""

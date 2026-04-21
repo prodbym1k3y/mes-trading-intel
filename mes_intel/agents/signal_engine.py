@@ -79,6 +79,8 @@ class SignalEngine:
         self.bus = bus
         self._last_signal_time: float = 0
         self._signal_count: int = 0
+        self._meta_learner = None
+        self._last_market_fingerprint: tuple = ()
 
         # Initialize strategies
         self.strategies: dict[str, Strategy] = {
@@ -123,6 +125,12 @@ class SignalEngine:
         """
         now = time.time()
         cfg = self.config.signals
+
+        if cfg.skip_duplicate_snapshots:
+            fingerprint = self._market_fingerprint(market_data)
+            if fingerprint == self._last_market_fingerprint:
+                return None
+            self._last_market_fingerprint = fingerprint
 
         # Cooldown check
         if now - self._last_signal_time < cfg.signal_cooldown_sec:
@@ -317,7 +325,23 @@ class SignalEngine:
     def _on_price_update(self, event: Event):
         """Handle incoming price updates — trigger re-evaluation."""
         # Market data is assembled by the chart monitor and passed here
-        pass
+        return None
+
+    def set_meta_learner(self, meta_learner) -> None:
+        self._meta_learner = meta_learner
+
+    def _market_fingerprint(self, market_data: dict) -> tuple:
+        prices = market_data.get("prices", [])
+        volumes = market_data.get("volumes", [])
+        deltas = market_data.get("delta_history", [])
+        return (
+            len(prices),
+            prices[-1] if prices else 0.0,
+            volumes[-1] if volumes else 0,
+            deltas[-1] if deltas else 0,
+            market_data.get("regime", "unknown"),
+            market_data.get("cross_asset_composite", 0.0),
+        )
 
     def _on_weight_adjustment(self, event: Event):
         """Handle weight adjustments from meta-learner."""
