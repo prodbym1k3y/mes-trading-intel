@@ -43,6 +43,9 @@ trade_journal/settings.json
 *.swp
 *.swo
 
+# Claude Code local settings (machine-specific permission grants)
+.claude/settings.local.json
+
 # Temp
 /tmp/
 *.tmp
