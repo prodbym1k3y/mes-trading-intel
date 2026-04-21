@@ -4,8 +4,13 @@ Initializes all agents, database, event bus, and launches the desktop app.
 """
 from __future__ import annotations
 
+import atexit
 import logging
+import os
+import signal
+import socket
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Setup logging before imports
@@ -15,6 +20,85 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("mes_intel")
+
+LOCK_STALE_HOURS = 2
+
+
+def _acquire_state_lock(state_dir: Path) -> None:
+    """Refuse to start if the shared state dir is locked by another machine.
+
+    The lockfile holds hostname/pid/timestamp. Stale locks (>2h) and same-host
+    locks are reclaimed automatically. A fresh cross-host lock causes exit —
+    protecting the SQLite DB from simultaneous writes when state_dir is shared
+    via a sync layer (iCloud, Dropbox, etc.).
+    """
+    state_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = state_dir / "RUNNING.lock"
+    hostname = socket.gethostname()
+    pid = os.getpid()
+    now = datetime.now(timezone.utc)
+
+    if lock_path.exists():
+        try:
+            kv = dict(
+                line.split("=", 1)
+                for line in lock_path.read_text(encoding="utf-8").splitlines()
+                if "=" in line
+            )
+        except OSError:
+            kv = {}
+
+        other_host = kv.get("hostname", "")
+        other_pid = kv.get("pid", "")
+        other_ts = kv.get("timestamp", "")
+        try:
+            age_h = (now - datetime.fromisoformat(other_ts)).total_seconds() / 3600
+        except (ValueError, TypeError):
+            age_h = float("inf")
+
+        if other_host and other_host != hostname and age_h < LOCK_STALE_HOURS:
+            log.error(
+                "MES Intel is already running on '%s' (pid %s, started %s UTC). "
+                "Refusing to start — concurrent writes would corrupt the shared "
+                "SQLite DB. If the other machine has stopped, delete: %s",
+                other_host, other_pid, other_ts, lock_path,
+            )
+            sys.exit(1)
+
+        if other_host == hostname:
+            log.info("Reclaiming stale local lockfile (pid %s)", other_pid)
+        else:
+            log.warning(
+                "Clearing stale lockfile from '%s' (age %.1fh)",
+                other_host or "?", age_h,
+            )
+
+    lock_path.write_text(
+        f"hostname={hostname}\npid={pid}\ntimestamp={now.isoformat()}\n",
+        encoding="utf-8",
+    )
+
+    def _release() -> None:
+        try:
+            if not lock_path.exists():
+                return
+            current = lock_path.read_text(encoding="utf-8")
+            if f"pid={pid}" in current and f"hostname={hostname}" in current:
+                lock_path.unlink()
+        except OSError:
+            pass
+
+    atexit.register(_release)
+
+    def _on_signal(signum: int, _frame) -> None:
+        _release()
+        sys.exit(128 + signum)
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            signal.signal(sig, _on_signal)
+        except (ValueError, OSError):
+            pass
 
 
 def main():
@@ -30,6 +114,10 @@ def main():
 
     config = AppConfig.load()
     config.save()  # persist defaults
+
+    # Multi-machine safety: var/mes_intel/ may be a symlink to a synced folder
+    # (e.g. iCloud Brain). Refuse to start if another host holds the lock.
+    _acquire_state_lock(Path(config.db_path).parent)
 
     db = Database(config.db_path)
     log.info("Database initialized: %s", config.db_path)
