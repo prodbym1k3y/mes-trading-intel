@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "mes-brain": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-sqlite",
+        "--db-path",
+        "${MES_BRAIN_DB_PATH}"
+      ]
+    },
+    "brain-files": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "${BRAIN_ROOT}"
+      ]
+    },
+    "mes-repo": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "${MES_REPO_ROOT}"
+      ]
+    }
+  }
+}

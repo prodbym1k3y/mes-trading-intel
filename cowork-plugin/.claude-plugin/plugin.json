@@ -1,0 +1,9 @@
+{
+  "name": "mes-trading-intel",
+  "version": "0.1.0",
+  "description": "Cowork integration for the MES Trading Intelligence System. Skills for daily prep, live regime checks, post-trade grading, pattern matching, and prop firm compliance — all wired into the shared brain SQLite DB via MCP.",
+  "author": {
+    "name": "m1k3y"
+  },
+  "keywords": ["trading", "futures", "mes", "order-flow", "quant", "options", "gex"]
+}
