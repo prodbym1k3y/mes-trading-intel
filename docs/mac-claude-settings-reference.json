@@ -1,0 +1,57 @@
+{
+  "_comment": "Reference config for Mac's ~/.claude/settings.json. Mirrors the PC integration but with Mac-native paths. Merge these mcpServers + env entries into your existing settings.json — don't blindly overwrite (you may have other servers configured).",
+  "autoUpdatesChannel": "latest",
+  "mcpServers": {
+    "fetch": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-fetch"
+      ]
+    },
+    "mes-brain": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-sqlite",
+        "--db-path",
+        "/Users/YOUR_MAC_USERNAME/Library/Mobile Documents/com~apple~CloudDocs/Brain/mes-state/mes_intel.db"
+      ]
+    },
+    "brain-files": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/YOUR_MAC_USERNAME/Library/Mobile Documents/com~apple~CloudDocs/Brain"
+      ]
+    },
+    "mes-repo": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/YOUR_MAC_USERNAME/trading"
+      ]
+    }
+  },
+  "effortLevel": "high",
+  "env": {
+    "BRAIN_ROOT": "/Users/YOUR_MAC_USERNAME/Library/Mobile Documents/com~apple~CloudDocs/Brain",
+    "MES_BRAIN_DB_PATH": "/Users/YOUR_MAC_USERNAME/Library/Mobile Documents/com~apple~CloudDocs/Brain/mes-state/mes_intel.db",
+    "MES_REPO_ROOT": "/Users/YOUR_MAC_USERNAME/trading"
+  },
+  "_notes": [
+    "1. Replace YOUR_MAC_USERNAME with your actual Mac username (check with `whoami` in Terminal)",
+    "2. If repo is NOT at ~/trading, adjust mes-repo path + MES_REPO_ROOT",
+    "3. After editing, fully quit + relaunch Claude Code (so MCPs respawn)",
+    "4. Verify: in a fresh session, the MCPs mes-brain / brain-files / mes-repo should appear",
+    "5. On Mac, env vars also need to be exported in ~/.zshrc for other tools (uvx, npx scripts): see block below"
+  ],
+  "_shell_env_vars_for_zshrc": [
+    "# Add these to ~/.zshrc so uvx/npx and other tools see the paths:",
+    "export BRAIN_ROOT=\"$HOME/Library/Mobile Documents/com~apple~CloudDocs/Brain\"",
+    "export MES_BRAIN_DB_PATH=\"$BRAIN_ROOT/mes-state/mes_intel.db\"",
+    "export MES_REPO_ROOT=\"$HOME/trading\"",
+    "# Then: source ~/.zshrc"
+  ]
+}
