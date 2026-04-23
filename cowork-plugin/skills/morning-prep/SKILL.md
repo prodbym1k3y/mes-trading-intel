@@ -1,78 +1,119 @@
 ---
 name: morning-prep
-description: Generates a pre-market trading briefing for MES futures. Pulls overnight ranges, key levels, regime context, GEX dealer positioning, news catalysts, prop firm constraints, and what worked / failed in recent sessions. Trigger phrases include "morning prep", "premarket", "what's the setup today", "brief me before the open", "morning briefing for MES".
+description: Pre-market briefing for Jaime's Apex eval session. Pulls yesterday's grade, current edges/leaks, account state vs DD bust, the 10-pt hold pattern reminder, and a today-focused commitment. Mirrors the PC tool `morning.py` in cowork form. Trigger phrases include "morning prep", "premarket", "morning brief", "what should I watch today", "preflight", "start the morning".
 ---
 
-# Morning Prep — MES Pre-Market Briefing
+# Morning Prep — Pre-Market Brief for the Apex Eval
 
-Generate a focused, scannable briefing the trader reads before the 6:30 AM Phoenix RTH open. Pull every signal from the brain DB, then render a single concise report.
+This is the morning-of-trading ritual. It's a **feedback-and-commitment** brief, not a signal generator. Goal: Jaime sits down with a clear read on yesterday + a single concrete commitment for today.
 
 ## Required context
 
-Load the `mes-context` skill first for instrument specs, session times, and DB schema. Use the `mes-brain` MCP server for all queries.
+Always load `mes-context` first. Default account: **APEX-565990-01**.
+
+The authoritative version of this routine on the PC is `python ~/mes-intel/tools/morning.py`. This skill is the cowork mirror — useful when Jaime's on the Mac or hasn't booted the PC yet. If he's at his PC, suggest running `morning.py` instead since it imports fresh Rithmic data.
+
+Use the `mes-brain` MCP for SQL queries, `brain-files` for CSV reads (filter to `account == 'APEX-565990-01'`).
 
 ## Workflow
 
-### 1. Establish "today"
+### 1. Today's date + session context
 
-- Today's date in Phoenix time (`America/Phoenix`).
-- Identify the prior RTH session date (skip weekends, holidays).
+Phoenix date and ET session window. Note day of week (Monday is a known leak — flag it).
 
-### 2. Recent performance digest
+### 2. Account state — APEX-565990-01
 
-Query `journal_trades` for trades in the last 5 RTH sessions:
-
-- Total trades, win rate, gross P&L, avg R, largest win, largest loss.
-- Group by `account_id` (or whatever the account tag column is) so the personal account and prop firms are separated.
-- Flag any prop firm account that is within 30% of its drawdown limit or 80% of its profit target — these are state-critical and the trader needs to know before placing the first trade.
-
-### 3. Regime carryover
-
-Query `market_regimes` for the most recent regime entry. Report:
-
-- Current regime name (trending/ranging/volatile/quiet/breakout).
-- How long has it persisted (in hours).
-- Hurst exponent if logged.
-- Recent regime transitions in the last 48 hours.
-
-### 4. Key levels for today
-
-Query `confluence_zones` for active levels (filter to those where the level is within ±50 points of last close). Report each as:
-
-- Price level, factor count, dominant factors (e.g. "VAH + GEX flip + prior day low").
-- Distance from last settlement.
-
-If `dark_pool_prints` has activity from yesterday's RTH, summarize it: total notional, average size, any clusters near a confluence zone.
-
-### 5. Strategy + agent state
-
-Query `agent_accuracy` for the last 7 days. List the top 3 strategies by recent accuracy and the bottom 3. The MetaLearner weights these via `strategy_weights_history` — pull the most recent weight snapshot and show what is currently being upweighted vs muted.
-
-### 6. News + catalysts
-
-If `learning_history` has entries from the NewsScanner in the last 18 hours, include them. Also flag known economic events for today (CPI, FOMC, NFP) — ask the user if you don't have a calendar source connected.
-
-### 7. The actual recommendation
-
-End with a 3-line "morning posture" summary:
+Read `journal/all_trades.csv`, filter to `APEX-565990-01`. Compute:
 
 ```
-Bias: <bullish|bearish|neutral|wait-for-confirmation>
-Posture: <aggressive|standard|defensive|sit-out>
-Watch: <one specific level or trigger that would change the call>
+Current cum_pnl: $X (last cum_pnl value)
+Current balance: $50,000 + cum_pnl = $Y
+Distance to DD bust ($48,000): $Z
+Distance to pass (+$3,000 net): $W remaining
+Trades logged this week: N
+Best session this week: $A (date)
+Worst session this week: $B (date)
 ```
 
-This is the part the trader wants. Make it specific. "Wait for confirmation above 5240 with positive delta and CD trending up" beats "be cautious."
+If balance is within $500 of $48,000: **flag as RED, recommend smallest-size sim day or no trade**.
+
+### 3. Yesterday's grade
+
+Read `journal/rule_compliance.csv`. Get the most recent row (yesterday's session if it exists). Render:
+
+```
+Yesterday: <date> · grade <A/B/C/D/F> (score_pct%)
+Trades: N · Net: $X
+Rules failed: <comma-separated list>
+```
+
+If yesterday was a C-or-worse session (a known leak): say so plainly. The rule is "if you only traded A/B sessions, you pass in ~11-12 sessions."
+
+### 4. Current edges and leaks
+
+Read the live files at `claude-memory/project_current_edges.md` and `claude-memory/project_current_leaks.md`. Render the top 3 of each as a tight table:
+
+```
+TODAY'S TAILWINDS (do more of):
+  - <slice>: NET +$X over N trades
+  - ...
+
+TODAY'S TRAPS (do less of):
+  - <slice>: NET -$X over N trades
+  - ...
+```
+
+If today's day-of-week or hour-of-day is in the LEAKS list, call it out: "Today is <Monday>, your worst day historically (-$446). Tighter rules required."
+
+### 5. The 10-pt hold reminder
+
+Always include this block (the prototype Jaime is reinforcing):
+
+```
+THE PROVEN PATTERN (Thu/Fri 4/16-4/17):
+  - NOT first trade — already green
+  - 9:41-11:00 ET window
+  - ~8 minute hold through pullback
+  - Few trades that day (3-4 total)
+```
+
+### 6. Streak status
+
+Read `journal/rule_compliance.csv`. Count consecutive sessions with score_pct >= 75. Render:
+
+```
+Discipline streak: N sessions
+Last break: <date> (score_pct%)
+```
+
+### 7. Today's commitment
+
+End with a single one-line commitment Jaime types/confirms before opening positions. Generate based on what surfaced:
+
+- If yesterday was D/F → "Today: max 5 trades. Hard stop after 2 consecutive losses."
+- If yesterday was A/B → "Today: protect the streak — same rules, no size escalation."
+- If Monday → "Today is Monday (-$446 leak). One trade before 09:00 ET; full stop if down 1R by 09:30."
+- If close to pass target (within $500) → "Within $500 of pass. Lock size, only A-grade setups, walk after first +1R."
+- If close to DD bust → "Within $500 of bust. Sim-only mode today."
+
+### 8. Suggested PC tool to run next
+
+Reference the tool that gives the authoritative answer:
+
+```
+For full version with fresh Rithmic import + gamma levels, run:
+  python ~/mes-intel/tools/morning.py
+```
 
 ## Output format
 
-A single markdown report. Sections in this order: **Top of mind** (the 3-line posture), **Account state**, **Levels**, **Regime**, **Edge today** (which strategies are hot), **Catalysts**, **Yesterday recap**.
+In order: **Account state**, **Yesterday's grade**, **Tailwinds + Traps**, **Proven pattern reminder**, **Streak**, **Today's commitment**, **PC tool suggestion**.
 
-Keep it under one screen. The trader will read this in 60 seconds before the open. Brevity is the brief.
+Length: under 50 lines. Read-in-60-seconds brief.
 
 ## Don'ts
 
-- Don't predict direction with false confidence. Frame as conditional ("if X, then Y").
-- Don't repeat raw DB rows — synthesize.
-- Don't include sections that have no data — omit them with a one-line "no signal" note instead.
-- Don't recommend overriding the prop firm rules. If an account is constrained, surface it loudly.
+- Don't predict direction or recommend entry direction.
+- Don't reference market regime / signal ensemble — those are old-app concepts not used in the current system.
+- Don't mix PERSONAL into anything here. APEX-565990-01 only.
+- Don't include "trading horoscope" — VIX/GEX/news. The PC's `gamma_analysis.py` handles that as POSTMORTEM context, not morning signal.

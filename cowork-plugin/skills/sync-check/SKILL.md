@@ -45,12 +45,13 @@ If data age is > 30 minutes during Phoenix RTH (6:30 AM – 2:00 PM weekdays), f
 
 ### 4. Obsidian + memory accessibility
 
-Spot check by listing a few files in:
+Spot check by listing:
 
-- `obsidian/Obsidian Vault/` — count `.md` files.
-- `claude-memory/` — check `MEMORY.md` exists.
+- `obsidian/Obsidian Vault/` — count `.md` files total. Expected >100 (rich vault).
+- `claude-memory/` — check `MEMORY.md` + the key project files exist: `user_trading_profile.md`, `feedback_account_separation.md`, `feedback_system_philosophy.md`, `project_apex_eval_analysis.md`, `project_current_edges.md`, `project_current_leaks.md`.
+- `journal/` — check `all_trades.csv`, `apex_grade_log.csv`, `rule_compliance.csv`, `brain-log.md` all exist.
 
-Confirm neither is empty (would indicate sync hasn't completed).
+Confirm none is empty or missing (would indicate PC-side sync hasn't completed).
 
 ### 5. iCloud sync hint (Mac only)
 

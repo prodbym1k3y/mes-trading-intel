@@ -1,93 +1,99 @@
 ---
 name: recall
-description: Search the shared Brain for prior thinking on a topic — Obsidian vault notes, Claude memory, and trade journal patterns. Surfaces what you've previously concluded, observed, or tried so you don't relearn the same lesson. Trigger phrases include "have I thought about this before", "what do I know about X", "recall my notes on", "search the brain", "what did I conclude about".
+description: Search the shared Brain for prior thinking on a topic — Obsidian vault, claude-memory facts, brain-log entries, past trade analogs. Returns a synthesized answer citing specific notes. Trigger phrases include "have I thought about this", "what do I know about X", "recall my notes", "search the brain", "what did I conclude", "have I seen this before".
 ---
 
-# Recall — Cross-Source Search of the Brain
+# Recall — Multi-Source Brain Search
 
-The Brain holds three layers of knowledge:
+The Brain holds four layers of knowledge:
 
-- **Obsidian vault** — long-form notes (insights, lessons, market structure observations)
-- **Claude memory** — durable facts (trader profile, project context, common pitfalls)
-- **mes_intel.db** — structured data (trades, regimes, patterns, agent learnings)
+- **`obsidian/Obsidian Vault/`** — long-form notes (Trades, Patterns, Learning, MarketContext, Daily, etc.)
+- **`claude-memory/`** — durable facts (user profile, account rules, philosophy, project context)
+- **`journal/brain-log.md`** — session-level running log, append-only
+- **`journal/all_trades.csv` + `apex_grade_log.csv`** — trade data, queryable for analogs
 
-This skill searches all three and synthesizes a single answer. Use when the user is forming a thought and wants to know what they've already concluded.
+This skill searches all four and synthesizes.
 
 ## Required context
 
-Load `mes-context` first. Use `brain-files` for filesystem search across `obsidian/Obsidian Vault/` and `claude-memory/`. Use `mes-brain` for SQL queries against the journal.
+Load `mes-context` first. Use `brain-files` MCP for file search/reads, `mes-brain` for DB queries if the topic has SQL data (`learning_history`, `market_patterns`, `agent_knowledge`).
 
-## Inputs to gather
+## Inputs
 
-The query topic. If unclear, ask:
-
-- What are you trying to recall? (a setup type, a market regime observation, a prop firm rule, a lesson, etc.)
+If unclear: "What topic are you trying to recall?" — accept single string.
 
 ## Workflow
 
-### 1. Search Obsidian vault
+### 1. Search claude-memory (highest-authority facts)
 
-Use `brain-files` to list and read files in `obsidian/Obsidian Vault/`. Strategy:
+`brain-files search_files` in `claude-memory/` for the topic. Read matched files (usually 1-3). These are your ground truth — if claude-memory says something, it supersedes Obsidian.
 
-- First, list all `.md` files (filenames often contain the topic).
-- Filter by filename match on the query terms.
-- For top 10 candidates, read the file and check body relevance.
-- Also check note tags in YAML frontmatter against the query.
+### 2. Search Obsidian vault
 
-Capture: file path, title, the most relevant 1-2 sentences.
+`brain-files search_files` under `Brain/obsidian/Obsidian Vault/` for:
+- Filename matches
+- Body text matches
+- Frontmatter tag matches
 
-### 2. Search Claude memory
+Rank by:
+- Match strength
+- Folder relevance to topic (e.g. "setup X" → search Patterns/ and Strategies/ first)
+- Recency (newer notes usually more relevant)
 
-Read all `.md` files in `claude-memory/`. These are short and structured — load them all and grep for relevance.
+Read top 5 matches. Extract the most relevant 1-2 sentences from each.
 
-Capture: file path, the relevant memory entry verbatim.
+### 3. Search brain-log
 
-### 3. Search the trade journal
+Read `Brain/journal/brain-log.md`. Grep for topic. Each session entry follows the `## YYYY-MM-DD HH:MM` format — return matching entries in full.
 
-Use `mes-brain` to query `journal_trades`, `market_patterns`, and `learning_history` for entries tagged or referenced by the topic.
+### 4. Search trade journal for analogs (if topic is a trade setup / pattern)
 
-If the topic is a setup type or pattern name, query `market_patterns` for matching entries. If it's a regime observation, query `market_regimes`. If it's a lesson or rule, query `learning_history`.
+Use `mes-brain` MCP to query `journal_trades` / `market_patterns` / `learning_history`. For trade topics, query `all_trades.csv` via `brain-files` for historical analogs.
 
-Capture: a 1-line summary of what the data says (e.g. "12 trades matching, 58% WR, avg +$45").
+### 5. Synthesize
 
-### 4. Synthesize
-
-Build a single response in this shape:
+Build response:
 
 ```markdown
-## What you've concluded
+## What you've concluded / observed
 
-<2-4 sentences synthesizing the prior thinking from Obsidian + memory.>
+<2-4 sentence synthesis — what you KNOW vs what's exploratory vs what's contradicted by data>
 
 ## Sources
 
+**Claude memory (authoritative):**
+- `<file>.md`: <verbatim relevant line>
+
 **Obsidian:**
-- [[<note title>]] — <one-line takeaway>
-- [[<note title>]] — <one-line takeaway>
+- [[note-filename]] — <one-line takeaway>
+- [[note-filename]] — <one-line takeaway>
 
-**Claude memory:**
-- <file>: <verbatim entry>
+**Brain log:**
+- <YYYY-MM-DD HH:MM>: <line or summary>
 
-**Brain DB:**
-- <table>: <stat summary>
+**Trade journal data:**
+- <N matching trades: win rate, avg P&L, regime>
 
-## Gaps
+## Gaps or contradictions
 
-<If the topic has thin coverage in any source, name it. "No journal data on this setup yet — would be good to /grade-trade the next one and /insight-capture the result.">
+<If sources disagree, call it out. If sparse coverage, say "not much data yet — would be good to /insight-capture after next session.">
 ```
 
-The synthesis at the top is the value — sources support it but aren't the answer.
+### 6. Suggest next action
 
-### 5. Suggest next action
+One-line suggestion:
+- Strong consistent prior → "You've concluded this. Trust it or actively challenge it."
+- Conflicting prior → "Sources disagree. Worth a fresh look — your earlier notes say X but recent data says Y."
+- Sparse → "Not much here yet. Run /playbook-match for the data analog."
+- Durable rule already in claude-memory → "This is a codified rule, not something to re-argue."
 
-If recall surfaces a clear pattern, end with one suggested next step:
+## Output format
 
-- Conflicting prior conclusions → "Worth a fresh review — your earlier notes say X but recent trades say Y."
-- Strong consistent prior → "You've concluded this before. Trust it or actively challenge it."
-- Sparse data → "Not enough yet. Run /playbook-match to see if the journal has analogs."
+Synthesis at top, sources middle, gaps + next at bottom. 30-50 lines.
 
 ## Don'ts
 
 - Don't return raw search results. Synthesize.
-- Don't claim to have searched a source you couldn't read. If `brain-files` errors, say so and proceed with what you got.
-- Don't fabricate links to notes that don't exist. Only `[[link]]` to actual vault filenames you verified.
+- Don't fabricate note links — only `[[link]]` to actual vault filenames you verified.
+- Don't claim to have searched a source that errored. Say so and proceed.
+- Claude-memory rules outrank Obsidian impressions. If `feedback_account_separation.md` says "never mix accounts" and an old Obsidian note suggests combined math, the memory file wins.

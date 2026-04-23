@@ -1,117 +1,169 @@
 ---
 name: mes-context
-description: Loads MES Trading Intelligence System context — instrument specs, session times, agent architecture, database schema. Use when any other MES skill needs ground-truth facts about the trader's setup, the SQLite brain DB structure, or the 8-agent system. Auto-load this skill when user mentions MES, futures session times, the brain DB, agent accuracy, or order flow tooling specifics.
+description: Loads the canonical MES trading system context for Jaime — two-account rule (PERSONAL vs APEX-565990-01), system philosophy (feedback NOT signals), data sources (journal CSVs + brain DB), the PC tools at ~/mes-intel/tools/, current edges and leaks. Auto-load this skill first when any other MES skill is invoked, or when the user asks anything about their trading, the eval, the system, or the brain.
 ---
 
-# MES Trading Intel — Ground Truth Context
+# MES Trading Intel — Ground Truth Context for Jaime
 
-This is reference knowledge for every other skill in the `mes-trading-intel` plugin. Load this first when answering anything about the trader's system, instrument, schedule, or the brain database.
+This is reference knowledge that EVERY other skill in the `mes-trading-intel` plugin depends on. Load this first. Treat the rules below as inviolable.
 
-## Trader profile
+## Trader
 
-- Trades **MES (Micro E-mini S&P 500)** futures via **AMP Futures** (broker), **Rithmic R|API** (data + execution feed), **ATAS** (charting).
-- Operates **own retail account + multiple prop firm accounts** in parallel — prop accounts have separate rule sets (drawdown, profit target, daily loss, scaling).
-- Methodology: **quantitative + order flow + options-derived dealer flow**. Specifically uses volume profile (with **40% Value Area**, non-standard), delta footprints, cumulative delta, and GEX (gamma exposure) levels for dealer positioning.
-- High-confidence setups only. Prefers fewer, better signals over churn.
+**Jaime** — full-time futures day trader on MES (Micro E-mini S&P 500). Trades through AMP Futures (Rithmic infrastructure). Charts on ATAS (paid, has real order flow) and ThinkorSwim. Phoenix, AZ time zone (UTC-7, no DST). Python beginner — prefers simple, readable code with comments.
 
-## Instrument specs (MES)
+## RULE #1 — Always separate the two accounts
 
-| Spec               | Value                            |
-|--------------------|----------------------------------|
-| Tick size          | 0.25 points                      |
-| Tick value         | $1.25 (NOT $5 — $5 is per point) |
-| Point value        | $5.00                            |
-| Contract           | 1/10 the size of full ES         |
-| Trading hours (RTH)| 6:30 AM – 2:00 PM Phoenix (UTC-7)|
-| Trading hours (ETH)| 3:00 PM – 6:29 AM Phoenix        |
-| Settlement         | 1:00 PM Phoenix                  |
+There are **TWO** accounts. They MUST never be mixed in any analysis. Mixing them silently corrupts every Apex calculation.
 
-> **Timezone is America/Phoenix (UTC-7, no DST).** Always render times in Phoenix unless explicitly asked otherwise. Convert any UTC timestamps from the DB to Phoenix before showing them.
+| Account | Source | Period | Money type | Apex rules apply |
+|---|---|---|---|---|
+| **PERSONAL** | AMP/Rithmic, ATAS exports | pre-2026-04-13 | Real personal $ | NO |
+| **APEX-565990-01** | Rithmic exports | 2026-04-13 onward | Funded eval | YES — drawdown, profit target, daily cap |
 
-## Value Area convention
+The `account` column in `journal/all_trades.csv` distinguishes them. **Default to APEX-565990-01 only** unless the user explicitly says "personal" or "both" or "lifetime."
 
-**40% Value Area is intentional and non-standard.** The typical 70% VA captures most volume — the trader uses 40% to surface a much tighter "consensus zone" for high-conviction setups. Do not "correct" this to 70%.
+When summarizing or saving learnings, ALWAYS tag which account the learning applies to. Never assert a "lifetime win rate" or "total P&L" combining both without clearly labeling it as combined.
 
-## The 8-agent system
+## RULE #2 — This system is FEEDBACK + COACHING, not signal generation
 
-The MES app (`/Users/m1k3y/trading/`, entry `python3 -m mes_intel`) runs 8 agents that share an event bus and a SQLite brain:
+Per Jaime's explicit pivot on 2026-04-17. Do NOT recommend "take this trade" or "don't take this trade." Real order flow lives in ATAS (paid). Real options data is in paid platforms. yfinance/free-data tools are POSTMORTEM context only.
 
-| Agent          | Role                                                                                |
-|----------------|-------------------------------------------------------------------------------------|
-| SignalEngine   | 35 quantitative strategies, ensemble scoring, gates by `min_confidence`             |
-| ChartMonitor   | Price action + pattern detection                                                    |
-| TradeJournal   | AI-graded logging with pattern matching against historical trades                   |
-| MetaLearner    | Bayesian weight updates for strategies, team meetings every 50 trades               |
-| NewsScanner    | News sentiment + catalyst detection (premarket sweep)                               |
-| DarkPoolAgent  | Large institutional print detection                                                 |
-| MarketBrain    | Regime (trending/ranging/volatile/quiet/breakout), Hurst exponent, FVGs, auction theory, Markov regime transitions |
-| AppOptimizer   | Learns user UI behavior, suggests workflow optimizations                            |
+What this skill plugin IS for:
+- Grading decisions after the fact
+- Surfacing patterns in his own behavior
+- Calling out leaks in commission, sizing, time-of-day, direction
+- Reinforcing the proven 10-pt hold pattern from Thu+Fri 4/16-4/17
 
-`mac-experimental` branch on GitHub also contains an `AutonomousOptimizer` that tunes signal thresholds per regime — not on `main` yet, may or may not be running locally.
+What it is NOT for:
+- Predicting direction
+- Generating entry signals from free price data
+- Suggesting specific trade ideas
 
-## The shared Brain — three MCPs
+When a skill is tempted to recommend an entry, instead reframe as: "the data shows X — your call."
 
-This plugin wires three MCP servers, all rooted in the iCloud-synced Brain folder shared between Mac and PC:
+## Apex 50k Eval — Live Status
 
-| MCP            | Backed by                        | Use for                                                       |
-|----------------|----------------------------------|---------------------------------------------------------------|
-| `mes-brain`    | SQLite at `mes-state/mes_intel.db` | All structured queries: trades, regimes, agents, dark pool, learning history |
-| `brain-files`  | Filesystem rooted at `Brain/`    | Read/write Obsidian vault notes, Claude memory, configs, models |
-| `mes-repo`     | Filesystem rooted at the trading repo | Read code, configs, strategy implementations, agent source — when discussing system behavior |
+**APEX-565990-01** is currently active. Monitor every session.
 
-Env vars required (each set per machine — see plugin README): `MES_BRAIN_DB_PATH`, `BRAIN_ROOT`, `MES_REPO_ROOT`.
+- Starting balance: $50,000
+- Current balance: ~$49,948 (as of 2026-04-17 snapshot — query journal for current)
+- **Trailing drawdown bust: $48,000** (trailing $2,000 from peak, NOT $2,500)
+- **Pass target: +$3,000 net profit** = ~$3,052 from current balance
+- Commission: **$1.34/RT/contract** via Rithmic routing
+- Symbol: MESM6 (June 2026)
+- Size: 5-7 contracts (was 1 pre-eval; escalation Mon → Fri week 1)
 
-### Brain folder layout
+### Week 1 (Apr 13-17) result
+- 41 trades, 5 sessions
+- Gross +$213.75, commissions –$262.64, **NET –$48.89**
+- Win rate 41.5%
+- Worst intraweek DD: $49,425 (Wed close — 29% of $2k buffer used)
 
-```
-Brain/
-├── mes-state/        ← config.json, mes_intel.db, models/, RUNNING.lock
-├── obsidian/
-│   └── Obsidian Vault/   ← trading notes (Trading/, Ideas/, etc.)
-└── claude-memory/    ← MEMORY.md + per-topic memory files
-```
+### The breakthrough pattern (proven Thu+Fri 4/16, 4/17)
+Two consecutive ~10-pt holds. Shared conditions:
+1. NOT first trade of the session — already green
+2. ~8-minute holds through pullbacks
+3. 9:41-11:00 ET window (NOT opening bell)
+4. Few total trades on those days (3-4 vs 10-13)
 
-### Brain DB — `mes_intel.db`
+This is the prototype to reinforce. Reference it whenever a skill needs to flag "is today on the path to that pattern."
 
-Connect via `mes-brain`.
+## Current edges and leaks (auto-updated)
 
-### Key tables
+Fresh edges and leaks live at `claude-memory/project_current_edges.md` and `claude-memory/project_current_leaks.md`. Read these when grading or analyzing — they're updated every brain sync.
 
-| Table                       | Holds                                                                       |
-|-----------------------------|-----------------------------------------------------------------------------|
-| `journal_trades`            | Every logged trade — entry/exit, size, P&L, AI grade, regime at entry       |
-| `agent_knowledge`           | What each agent has learned (key/value per agent)                           |
-| `learning_history`          | Time-series of lessons learned (event-sourced)                              |
-| `strategy_weights_history`  | Meta-learner's strategy weight changes over time                            |
-| `market_patterns`           | Library of recognized chart/orderflow patterns with outcome stats           |
-| `market_regimes`            | Regime transitions logged by MarketBrain                                    |
-| `agent_accuracy`            | Per-agent prediction accuracy over rolling windows                          |
-| `dark_pool_prints`          | Large institutional trades detected                                         |
-| `confluence_zones`          | Multi-factor high-conviction price levels                                   |
-| `chat_history`              | In-app AI assistant conversations                                           |
-| `usage_analytics`           | UI usage events (powers AppOptimizer)                                       |
+Snapshot from 2026-04-23:
+- **Edges**: A_or_B sessions (+$597), patient holds 3-15m (+$593), trade #3 (+$372), 08h hour (+$370), long direction (+$346), Thursdays (+$279)
+- **Leaks**: C-or-worse sessions (-$574), quick scalps <3m (-$497), Mondays (-$446), short direction (-$322), 06h hour (-$295), 5-contract size (-$231)
 
-### Querying conventions
+## Data sources — where the truth lives
 
-- Always **introspect the schema first** with `PRAGMA table_info(<table>)` before assuming column names — schema evolves between branches.
-- Times in the DB are **UTC ISO strings** unless a column name says otherwise. Convert to Phoenix for display.
-- `journal_trades` has account-tagging columns (look for `account_id` or `account_name`) so prop firms can be separated from the personal account.
+The Brain (iCloud-synced between Mac and PC) has THREE relevant data layers:
 
-## Critical files in the repo
+| Path (under `Brain/`) | What | Use for |
+|---|---|---|
+| `journal/all_trades.csv` | Every trade, both accounts, with `account` column | All trade analysis (filter to APEX by default) |
+| `journal/apex_grade_log.csv` | Manually-logged Apex runner trades with hold conditions, tape trend, confidence | Studying the 10-pt hold pattern |
+| `journal/rule_compliance.csv` | Per-session 10-rule grading, A-F score | Streak / session quality / leak analysis |
+| `journal/trades_YYYY-MM-DD.csv` | Daily exports per session | Spot-check single days |
+| `journal/summary.json` | PERSONAL summary (Mar 24 - Apr 10) | Pre-eval baseline |
+| `journal/trades.db` and `journal/live_ticks.db` | SQLite versions of trade data | Programmatic queries |
+| `journal/brain-log.md` | Append-only running session learnings | Read for context, append after sessions |
+| `mes-state/mes_intel.db` | Old PySide6 app's brain (26 tables, mostly empty) | Legacy — `learning_history` has 209 entries from Apr 4 |
+| `obsidian/Obsidian Vault/` | Long-form notes, trade write-ups, system docs | Reading + write-back via /insight-capture |
+| `claude-memory/` | Durable facts (this folder) | Read at start of sessions |
 
-| Path                                  | Purpose                                                            |
-|---------------------------------------|--------------------------------------------------------------------|
-| `mes_intel/main.py`                   | Entry point, lockfile guard for shared state                       |
-| `mes_intel/config.py`                 | All tunable thresholds (`AppConfig` dataclass)                     |
-| `mes_intel/agents/`                   | The 8 agent modules                                                |
-| `mes_intel/strategies/`               | 35 strategy implementations, all inherit `base.Strategy`           |
-| `mes_intel/database.py`               | SQLite wrapper + schema                                            |
-| `var/mes_intel/`                      | Symlink → `Brain/mes-state/` (config.json, mes_intel.db, models/)  |
-| `BOOTSTRAP_WINDOWS.md`                | PC-side setup walkthrough                                          |
+**Trade CSV schema** (`all_trades.csv` and daily files):
+`trade_num, session_date, account, direction, contracts, entry_time, entry_price, exit_time, exit_price, duration_sec, gross_pnl, commission, pnl_dollars, ticks, cum_pnl`
 
-## Common pitfalls
+**Apex runner log schema** (`apex_grade_log.csv`):
+`logged_at, trade_date, trade_time_et, direction, contracts, entry_price, exit_price, ticks, hold_seconds, net_pnl, session_trade_num, session_pnl_entering, session_pnl_exiting, recent_loss_within_5min, held_through_pullback, time_bucket, tape_trend, confidence_1to5, notes`
 
-- The state path `var/mes_intel/` is a **symlink to iCloud Brain**. Never assume it's a local-only directory.
-- `RUNNING.lock` in the state dir guards against both machines running the app at once. Don't delete it without confirming the other machine is actually stopped.
-- The venv lives at the project root (`bin/`, `lib/`, `include/`, `pyvenv.cfg`) — those aren't project code.
-- macOS uses `python3`, not `python`.
+**Rule compliance schema** (`rule_compliance.csv`):
+`date, trades, net_pnl, score_pct, R1_size_locked, R2_opening_cap, R3_daily_cap, R4_stop_discipline, R5_no_revenge, R6_edge_quality, R7_loss_limit, R8_dd_buffer, R9_no_tilt, R10_profit_stop, violations`
+
+The 10 rules are: size locked, opening cap, daily cap, stop discipline, no revenge, edge quality, loss limit, DD buffer, no tilt, profit stop. Each is PASS or FAIL per session.
+
+## The PC tools at `~/mes-intel/tools/` (and `~/workflows/apex/`)
+
+Jaime built a parallel CLI toolkit on his PC. Many of these skills should reference the matching tool when relevant — Jaime can run them directly in his terminal for the authoritative answer:
+
+| Tool | Purpose |
+|---|---|
+| `performance_report.py --all` | Full 12-section analysis |
+| `leak_detector.py` | Where money is going |
+| `grade_session.py` | Daily 10-rule grade |
+| `grade_trade.py` | Single-trade grading |
+| `streak.py` | Discipline streak (threshold: score >=75%) |
+| `drawdown_monitor.py` | Live APEX status |
+| `apex_setup_detector.py` | Score conditions vs Thu/Fri prototype |
+| `commission_filter.py` | Size stress-test |
+| `pretrade.py` | Pre-entry friction CLI (refuses <6-tick edge) |
+| `morning.py` | Pre-market sequence (import + monitor + detector + preflight) |
+| `dashboard.py` | Unified view of all key snapshots |
+| `apex_trade_log.py` | Runner trade journal append |
+| `daily_post.py` | Generate accountability snippet, copy to clipboard |
+| `sim_gate.py` | Track which new rules are proven (N clean sim trades) |
+| `accountability_export.py` | Daily Discord/chat snippet |
+
+Workflows at `~/workflows/apex/`:
+`pre-market.md`, `live-monitor.md`, `log-runner.md`, `weekend-review.md`, `commission-stress-test.md`
+
+When a skill in this plugin overlaps with one of these tools, **reference the tool by name** so Jaime knows the authoritative version exists.
+
+## Instrument specs
+
+| Spec | Value |
+|---|---|
+| Tick size | 0.25 points |
+| Tick value | $1.25 |
+| Point value | $5.00 |
+| Commission | $1.34/RT/contract (Rithmic via AMP) |
+| Symbol | MESM6 (June 2026) |
+| Trading hours (RTH) | 6:30 AM – 2:00 PM Phoenix (9:30-17:00 ET) |
+| Settlement | 1:00 PM Phoenix |
+| Timezone | America/Phoenix (UTC-7, no DST) |
+
+**Commission math reference:**
+- $1.34 × 5 contracts = $6.70/RT
+- $1.34 × 7 contracts = $9.38/RT
+- Break-even on 5-contract trade = 1.34 points (5.4 ticks) gross before any move
+- Sub-6-tick scalps are **mathematically negative expectancy** after fees
+
+## Behavioral patterns to call out
+
+The user is aware of these — surface them when relevant, never moralize:
+
+- **Overtrading is the #1 issue** — sessions with ≤11 trades have been profitable, ≥13 have lost. Hard cap: 10 trades.
+- **Tilt/revenge cluster** — after losses, he enters rapid-fire trades within 90 sec. (Mar 26: 22 trades in 17 min. Mar 31: 10 in 8 min.)
+- **Opening-bell overtrading** — Mon 4/13 was 10 trades in first 34 minutes.
+- **Stop discipline** — Trade 8 Mon 4/13 ran -8.25 pts on 5 contracts (-$206) before exit.
+- **Size escalation mid-session** — went 1 → 5 → 7 contracts before proving the 10-pt hold.
+
+## Don'ts (hard rules)
+
+- Never combine PERSONAL and APEX in P&L without explicitly labeling combined.
+- Never recommend a trade entry — the system is feedback only.
+- Never assume current balance from old memory snapshots — query `journal/all_trades.csv` for `cum_pnl` against APEX-565990-01.
+- Never override or contradict `feedback_account_separation.md` or `feedback_system_philosophy.md`.
+- Don't tag Jaime's MEMORY.md with new entries unless the fact is durable and project-level.

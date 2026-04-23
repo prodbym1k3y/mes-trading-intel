@@ -1,139 +1,172 @@
 ---
 name: grade-day
-description: End-of-day quantitative + behavioral review. Grades each trade against the system's signals AND classifies the state that took it (Patient vs Triggered Jaime). Surfaces the session's psychological arc and names tomorrow's ONE adjustment. Trigger phrases include "grade my day", "EOD review", "how did I do today", "post market review", "wrap the day".
+description: End-of-day Apex session review — pulls today's trades from journal/all_trades.csv, scores against the 10 Apex rules, classifies the psychological state that drove the session (Patient vs Triggered Jaime), narrates the session arc (Open / Build / Edge Window / Fatigue), names which leak/edge slices fired, and surfaces ONE behavioral commitment for tomorrow. Mirrors `grade_session.py` + `leak_detector.py`. Trigger phrases include "grade my day", "EOD", "session review", "how did I do today", "grade today", "wrap the session".
 ---
 
-# Grade Day — End-of-Day Performance + Behavioral Review
+# Grade Day — End-of-Session Apex Review (Performance + Behavioral)
 
-This is the daily reflection ritual. The goal is not to make the trader feel good or bad — it is to surface **concrete patterns that compound into improvement**. Every session is a data point for the psychological profile; this skill writes it.
+This is the daily reflection ritual. Goal: not to feel good or bad, but to surface ONE concrete behavioral adjustment for tomorrow. Every session is also a data point for the psychological profile — this skill writes that data.
 
 ## Required context
 
-1. Load `mes-context` — instrument specs, schema.
-2. Load `brain-files` → read `Brain/obsidian/Obsidian Vault/Learnings/psychology-profile.md` in full. Every grade, every pattern, every adjustment is framed against this.
-3. Use `mes-brain` MCP for queries. Today's Phoenix date is the session boundary unless the user specifies another.
+1. Load `mes-context` first.
+2. Use `brain-files` to read `Brain/obsidian/Obsidian Vault/Learnings/psychology-profile.md` — the behavioral anchor for state classification.
+3. Default account: **APEX-565990-01**. Authoritative version on PC: `python ~/mes-intel/tools/grade_session.py` followed by `python ~/mes-intel/tools/leak_detector.py`. This is the cowork mirror.
 
 ## Workflow
 
-### 1. Pull today's trades
+### 1. Pull today's APEX trades
 
-Query `journal_trades` for entries in today's RTH window (06:30 AM – 13:00 PM Phoenix). Order chronologically. For each trade capture: entry time, exit time, side, size, instrument, entry price, exit price, P&L (in $ and points), AI grade if present, regime at entry, account, **seconds since last exit**, **session P&L at entry**.
+Read `journal/all_trades.csv` via `brain-files`, filter to `account == 'APEX-565990-01'` AND `session_date == today` (Phoenix). Order chronologically. For each trade also derive: **seconds since last exit**, **session P&L at entry**, **Phoenix entry hour**.
 
-If there were no trades, end here with: *"No trades today. State: flat. Want to run /morning-prep for tomorrow instead?"*
+If zero APEX trades: end with "No APEX trades today. State: flat. /streak status / /weekly-review / /morning-prep for tomorrow?"
 
 ### 2. Headline numbers
 
 ```
-Trades: N          Win rate: X%
-Net P&L: $Y (Z points)
-Avg winner: $A     Avg loser: $B
-Profit factor: <gross_wins / gross_losses>
-Max intraday DD: $C
-By account: personal $X | apex $Y
+Date: <yyyy-mm-dd>
+Trades: N · Win rate: X%
+Gross: $A · Commissions: $B · Net: $C
+Avg winner: $D · avg loser: $E · profit factor: <pf>
+Worst trade: $F (#N, <ticks>t in <duration_sec>s)
+Total contracts traded: <sum>
+Max intraday DD: $G
 ```
 
-### 3. Per-trade grade (5 axes, A/B/C/D/F each)
+### 3. Per-trade grade (5 axes)
 
-| Axis              | Measures                                                                       |
-|-------------------|--------------------------------------------------------------------------------|
-| **Setup**         | System aligned at entry? (regime + ensemble + zone)                            |
-| **Entry**         | Price near the signal trigger, or chase?                                       |
-| **Management**    | Respected invalidation? Trailed vs panic-exited?                               |
-| **Exit**          | Took what was there, or cut too early / overstayed?                            |
-| **🧠 State**      | Which of "Two Jaimes" took this trade? (Patient vs Triggered-[which trigger]) |
+For each trade, render: `[HH:MM] [L/S] [Nct] [+/-$X] [Setup/Entry/Mgmt/Exit/🧠 grades] [1-line note]`
 
-Render as a compact per-trade row:
-`[HH:MM] [L/S] [size] [+/-$] [S/E/M/X/🧠 grades] [1-line note]`
+| Axis | Measures |
+|---|---|
+| **Setup** | Edge slice or leak slice from current_edges/leaks? |
+| **Entry** | Price near plan, or chase? Within proven 10-pt hold window? |
+| **Mgmt** | Respected stop? Patient through pullback? |
+| **Exit** | Captured available, or quick-grab / overstay? |
+| **🧠 State** | Which "Jaime" — Patient, or Triggered (which trigger)? |
 
-### 4. The session arc
+### 4. The 10-rule Apex grade
 
-Narrate the psychological arc of the session using the phases from the profile:
+Score each rule:
+
+| Rule | PASS/FAIL | Why |
+|---|---|---|
+| R1 size_locked | | All trades same size? Mid-session escalation? |
+| R2 opening_cap | | ≤2 trades in first 30 min ET? |
+| R3 daily_cap | | ≤10 trades total? |
+| R4 stop_discipline | | Any loss > 4pts (5ct) / 5pts (7ct)? |
+| R5 no_revenge | | Same-side re-entry within 5 min of a loss? |
+| R6 edge_quality | | All trades ≥6-tick gross edge expectation? |
+| R7 loss_limit | | Total daily loss < $300? |
+| R8 dd_buffer | | Session ever closed < $48,500? |
+| R9 no_tilt | | Any cluster of 3+ trades in <10 min after a loss? |
+| R10 profit_stop | | If +$300 hit intraday, did he stop? |
+
+Final score: % rules passed. Letter grade: A=90+, B=75-89, C=60-74, D=50-59, F=<50.
+
+This format matches `journal/rule_compliance.csv` so it can be appended via `brain-files`.
+
+### 5. The session arc (psychological)
+
+Narrate using the phases from psychology-profile.md:
 
 ```
 THE ARC
-06:30–07:00 (Open)        : <what happened, which state>
-07:00–08:30 (Build)       : <what happened>
-08:00–09:00 (Edge Window) : <did he trade his 100% WR hour?>
-09:00–13:00 (Fatigue)     : <state drift?>
+06:30–07:00 (Open)        : <state, count, trigger fires>
+07:00–08:00 (Build)       : <state, count>
+08:00–09:00 (EDGE WINDOW) : <did he trade his historical 100% WR hour?>
+09:00–11:00 (Mid)         : <state drift?>
+11:00–13:00 (Fatigue)     : <late-day discipline?>
 ```
 
 Flag explicitly:
-- **Pre-noon profit stop**: if green before 09:00 Phoenix, did he stop? (Rule says he should.)
-- **Hour 06 exposure**: how many trades in the 25%-WR leak hour?
-- **Hour 08 capture**: how many trades in the 100%-WR edge window?
+- **Pre-noon profit stop**: green before 09:00 Phoenix → did he stop, per rule?
+- **Hour 06 exposure**: how many trades in the leak hour?
+- **Hour 08 capture**: how many trades in the edge window?
+- **The proven 10-pt hold prototype window** (09:41-11:00 ET = 06:41-08:00 Phoenix): any trades in it?
 
-### 5. Pattern recognition (what repeated)
+### 6. Commission audit
 
-Look across today for:
-
-- All losses concentrated in one state (e.g., "4 of 4 losses were Triggered-Revenge trades") → flag.
-- All wins concentrated in one condition (e.g., "all 3 winners were Trade #3+ of session, patient hold") → flag.
-- Trigger cascades: did a revenge spiral happen? Did overtrading start after a specific trade?
-- Entries during low ensemble confidence or uncertain regime → flag.
-
-### 6. Which Jaime showed up today?
-
-One-sentence classification:
-- **"Mostly Patient"** — 0–2 triggered trades, pace under 10, state stable.
-- **"Drifted"** — started Patient, drifted Triggered mid-session. Identify the inflection trade.
-- **"Triggered early"** — first 3 trades showed a trigger. Session likely unsalvageable from there.
-- **"Recovered"** — started Triggered, recovered to Patient. Note what broke the spiral.
-
-### 7. Vs baseline
-
-Pull the last 20 RTH sessions. Compare today's: win rate, profit factor, triggered-trade share, avg hold on winners.
-Today vs baseline: **above / at / below**. Say it plainly.
-
-### 8. Tomorrow's ONE adjustment
-
-End with **one specific behavioral adjustment** derived from today's patterns, framed against the psychology profile:
-
-- "Skip the first 30 min. Today's 2 losses in Hour 06 = $X. Hour 06 is a documented leak."
-- "Hard cap 8 trades tomorrow. Today you took 12; trades 9–12 were all Triggered."
-- "After any loss tomorrow, stand up. Today you re-entered 3× within 90s; all lost."
-- "Trail by structure, not by dollar. Today you cut 2 winners at +4t that went to +12t."
-
-**ONE** adjustment. Not five. Compounding requires focus.
-
-### 9. Write the session note
-
-Save to `Brain/obsidian/Obsidian Vault/Daily/YYYY-MM-DD.md` in this frontmatter form:
-
-```yaml
----
-date: YYYY-MM-DD
-trades: N
-net_pnl: $X
-grade: [A/B/C/D/F overall]
-which_jaime: [mostly_patient | drifted | triggered_early | recovered]
-top_trigger: [revenge | overtrade | hole | quick_grab | long_bias | none]
-edge_captured: [true/false]  # did he trade the 08:00 window patient?
-tomorrow_adjustment: <one line>
----
+```
+Round-trips: N · Commission paid: $X · % of gross: Y%
 ```
 
-Body: the full grade-day output. This file becomes the training data for pattern refinement.
+If Y > 50%: "Commission drag is the silent leak today."
 
-## Output format to the user
+### 7. Leak slices that fired
 
-In order:
-1. Headline numbers
-2. Per-trade table
-3. THE ARC
-4. Which Jaime showed up
-5. Patterns I noticed
-6. Vs baseline
-7. Tomorrow's ONE adjustment
+Read `claude-memory/project_current_leaks.md`. For each top-5 leak, count today's matching trades:
 
-End there. No pep talk.
+```
+Today's leak exposure:
+  - quick (<3m): 4 trades, –$87 contributed
+  - short direction: 3 trades, –$45
+  - 06h hour: 2 trades, –$22
+  TOTAL leak: –$154 (X% of today's loss)
+```
+
+### 8. Edge slices that fired
+
+Same against `project_current_edges.md`:
+
+```
+Today's edge capture:
+  - patient (3-15m): 2 trades, +$120
+  - long direction: 5 trades, +$80
+  TOTAL edge: +$200
+```
+
+### 9. Which Jaime showed up today?
+
+One-sentence classification:
+- **"Mostly Patient"** — 0–2 triggered trades, ≤10 trades, state stable
+- **"Drifted"** — started Patient, drifted Triggered mid-session. **Identify the inflection trade** (the one that broke the state)
+- **"Triggered early"** — first 3 trades showed a trigger. Session likely unsalvageable from there
+- **"Recovered"** — started Triggered, recovered to Patient. **Note what broke the spiral**
+
+### 10. Pattern recognition (what repeated)
+
+- All losses concentrated in one state? (e.g. "4 of 4 losses were Triggered-Revenge")
+- All wins in one condition? (e.g. "all 3 winners were Trade #3+ patient hold")
+- Trigger cascades — did one trigger spawn another?
+- Entries during low-edge slices?
+
+### 11. Comparison to baseline
+
+Read last 5 sessions from `journal/all_trades.csv` and `rule_compliance.csv`. Compare today's net P&L, win rate, grade, **triggered-trade share**, **avg winner hold time** against rolling baseline. Today is "above / at / below baseline."
+
+### 12. Tomorrow's commitment
+
+ONE specific behavioral commitment derived from the data + state classification:
+
+- If R5 failed AND today net negative → "Tomorrow: 90-second hard cool-down between trades. Phone timer."
+- If R1 failed → "Tomorrow: lock size at 5 contracts. No mid-session changes regardless of conviction."
+- If quick scalps top leak → "Tomorrow: every entry has a 6-min minimum hold thesis written before clicking."
+- If today A/B + matched proven pattern → "Tomorrow: same rules, same size. Don't innovate. Protect the streak."
+- If today D/F → "Tomorrow: 5-trade max. After 2 losses, walk."
+- If "Drifted" classification → "Tomorrow: at the inflection-trigger moment (e.g. first revenge candidate), close the DOM and run /psych-check."
+- If "Triggered early" → "Tomorrow: skip the first 30 minutes. Let Hour 08 be the start of trading."
+
+ONE commitment. Not five.
+
+### 13. Suggested follow-ups
+
+```
+- Append today's row to rule_compliance.csv (via brain-files write_file)
+- /insight-capture the inflection moment if "Drifted" today
+- /accountability-post the commitment
+- /streak — see where the streak stands
+- /identify-leak — if commissions ate >50% of gross
+```
+
+## Output format
+
+Headline → per-trade table → 10-rule grade → session arc → commissions → leaks fired → edges fired → Which Jaime → patterns → vs baseline → commitment → follow-ups. 60-90 lines.
 
 ## Don'ts
 
-- **Don't grade emotionally.** No "you traded well!" A winning day from Triggered Jaime is luck, not edge. A losing day from Patient Jaime is cost of doing business.
-- Don't recommend strategy changes — MetaLearner's job.
-- Don't write a wall of text. Per-trade table is the meat; prose is the connective tissue.
-- Don't suggest more than one adjustment.
-- Don't skip the session note write — future grading depends on it.
-
----
-*Anchors on: `Brain/obsidian/Obsidian Vault/Learnings/psychology-profile.md` | Writes: `Brain/obsidian/Obsidian Vault/Daily/`*
+- Don't grade emotionally. Grade against rules + state.
+- Don't suggest >1 commitment for tomorrow.
+- Don't include PERSONAL trades. APEX-565990-01 only.
+- Don't speculate on market direction or "should have done X" — only behavioral analysis.
+- Don't soften the "Triggered" diagnosis. The whole point is naming it lets him fix it.

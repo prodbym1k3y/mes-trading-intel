@@ -1,70 +1,104 @@
 ---
 name: regime-check
-description: Live snapshot of current MES market regime, signal engine ensemble score, dark pool activity, GEX dealer positioning, and recommended posture. Use during the trading session when the trader asks "what's the regime", "is this trendable", "should I be in this", "what are the agents saying right now", or "regime check".
+description: POSTMORTEM context snapshot — what the market structure looked like (VWAP, opening range, prior day H/L, gamma levels, VIX) at a specific time or now. Used for analyzing trades after the fact, NOT for entry signals. Mirrors `market_context.py` + `gamma_analysis.py` on PC. Trigger phrases include "context check", "what was the regime", "market context", "gamma levels", "regime for this trade".
 ---
 
-# Regime Check — Live Trading Snapshot
+# Regime Check — Postmortem Market Context
 
-The trader is at the screen, has a setup forming or a position on, and wants the system's read in 5 seconds. This skill reads the most recent state from the brain DB and renders a tight verdict.
+Per Jaime's explicit system philosophy: this is NOT a signal generator. It reports what market structure looked like at a point in time (usually the entry of a trade being reviewed) so Jaime can understand why a setup worked or didn't.
 
 ## Required context
 
-Load `mes-context` first. Use `mes-brain` MCP for all queries.
+Load `mes-context` first. Authoritative PC tools: `python ~/mes-intel/tools/market_context.py` and `gamma_analysis.py`. These fetch live ES bars + VIX + SPX options chain. This skill surfaces already-computed context from `journal/trade_context.csv` if available.
+
+**Hard rule**: this skill does not output "bullish / bearish" or "go / no-go" verdicts. It describes structure. User draws conclusions.
+
+## Inputs
+
+- A trade reference (trade_num, date, or timestamp) OR "current"
+- If "current" and user is live-trading, gently redirect: "Live trading → don't look here for an entry opinion. Use `/pre-trade-checklist` for friction instead. This skill is for postmortem."
 
 ## Workflow
 
-### 1. Most recent regime
+### 1. Pull trade context if it exists
 
-Query `market_regimes` ORDER BY timestamp DESC LIMIT 1. Report:
+Check `journal/trade_context.csv` (populated by `market_context.py`) for the trade's pre-annotated context. Columns likely include:
 
-- Regime name and confidence.
-- Time since regime change (Phoenix time).
-- Hurst exponent if available (>0.5 trending, <0.5 mean-reverting, ≈0.5 random walk).
+- micro_trend_5min, micro_trend_15min, micro_trend_30min
+- vwap_distance (points from VWAP at entry)
+- opening_range_position (above/below/within)
+- prior_day_high, prior_day_low (distance to each)
+- fifteen_min_break_state (holding break, failed break, consolidating)
+- mfe_next_10bars, mae_next_10bars
 
-### 2. Signal engine current state
+If context exists: render each field as a line, with a one-word interpretation (neutral words only — "above VWAP" not "bullish").
 
-The SignalEngine writes ensemble scores to either `agent_knowledge` (key like `last_ensemble`) or has a recent entry in `learning_history`. Find the most recent ensemble snapshot. Report:
+If context doesn't exist for this trade:
+- "No trade_context.csv entry — run `python ~/mes-intel/tools/market_context.py --trade N` on PC to generate."
 
-- Number of strategies agreeing.
-- Aggregate confidence.
-- Direction (long bias / short bias / neutral).
-- Top 3 contributing strategies by individual confidence.
+### 2. Gamma snapshot (if available)
 
-### 3. Dark pool pulse
-
-Query `dark_pool_prints` for the last 60 minutes. Report:
-
-- Print count.
-- Total notional.
-- Direction skew if inferable (block prints near bid vs ask, or above/below VWAP).
-- Largest single print and its proximity to current price.
-
-### 4. Confluence zones in play
-
-Query `confluence_zones` for the closest 3 levels above and 3 below the last known mark. Don't list more — clutter kills usefulness intra-session.
-
-### 5. Agent accuracy drift
-
-Query `agent_accuracy` filtering to today's session. If any agent's accuracy has dropped >15% from its 30-day baseline, flag it — the system is in unusual conditions for that agent.
-
-### 6. The verdict
-
-End with a single block:
+If the trade has an associated gamma_analysis output (timestamped), surface:
 
 ```
-Posture: <go|wait|stand-aside>
-Why: <one sentence>
-Invalidation: <specific price or condition>
+At trade time:
+  Spot: $X
+  Zero-gamma level: $Y
+  Closest call wall above: $Z (distance +$A)
+  Closest put support below: $B (distance -$C)
+  VIX: X
 ```
 
-`go` = the system is aligned for active trading. `wait` = mixed signals, hold off. `stand-aside` = conditions are bad, no trade.
+Caveat disclosure: "Gamma = SPX snapshot, approximated to ES at +20 pts fair value. Inexact but structural signal is directional."
+
+If no gamma data: say so.
+
+### 3. MFE/MAE analysis
+
+From trade_context.csv:
+
+```
+Trade's actual ticks captured: N
+MFE over next 10 bars from entry: M ticks  → % captured: X%
+MAE over next 10 bars: P ticks  → how deep you went underwater: $Y
+```
+
+If Jaime captured <40% of MFE: "Exit may have been early." (Observation, not prescription.)
+If MAE was >60% of eventual stop: "You survived a deep pullback to a winner — patience was rewarded on this one."
+
+### 4. Structural observations (not signals)
+
+Two or three structural observations about the setup's context:
+
+- "Entry was <above|below|at> VWAP (distance X pts)."
+- "Price was in upper/lower third of opening range."
+- "Prior day high was <N pts above|below> entry."
+- "15-min break had <held|failed|was in progress>."
+
+Never connect these to "this means you should have done X." Only describe.
+
+### 5. Reference PC tool
+
+End with:
+
+```
+For full postmortem with per-trade insights:
+  python ~/mes-intel/tools/trade_postmortem.py --trade <N>
+
+Or a whole week's review:
+  python ~/mes-intel/tools/trade_postmortem.py --week
+```
 
 ## Output format
 
-One screen. Use a small table for the regime + ensemble row, bullet list for dark pool + zones, then the verdict block at the bottom.
+Trade identification → context fields → gamma → MFE/MAE → structural notes → PC tool ref.
+
+20-35 lines.
 
 ## Don'ts
 
-- Don't run analyses that take more than a few queries — the trader is live and waiting.
-- Don't recommend specific trade sizing — that's account- and risk-tolerance-specific.
-- Don't sugar-coat a `stand-aside` call. The system says no trade, you say no trade.
+- **NEVER output "bullish / bearish / long bias / short bias" framing.** Describe structure, not direction.
+- Don't connect context to "should have done X" — structural observations only.
+- Don't treat yfinance data as authoritative — flag it as approximate.
+- Don't use this skill live (during market). It's a review tool.
+- Don't invent gamma or MFE data if the source file doesn't have it. Say so instead.

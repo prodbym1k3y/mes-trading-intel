@@ -1,89 +1,143 @@
 ---
 name: weekly-review
-description: Comprehensive weekly retrospective across all MES trading. Aggregates daily grades, regime distribution, account growth trajectories, edge cases, and behavioral patterns. Heavier than /grade-day — meant for Sunday/Saturday review sessions. Trigger phrases include "weekly review", "review this week", "weekly retro", "how was my week", "Sunday review".
+description: Weekend retrospective across the Apex eval week. Aggregates daily grades, 10-rule rollups, P&L by day/regime/slice, commission drag, streak progression, and surfaces the structural lesson for next week. Mirrors `review_rotation.py` (themed weekly rotation). Trigger phrases include "weekly review", "weekend review", "review the week", "how was my week", "friday review".
 ---
 
-# Weekly Review — The Bigger Picture
+# Weekly Review — Apex Eval Weekend Retrospective
 
-Once a week the trader steps back from individual sessions and looks at the shape of things. This skill synthesizes 5 RTH sessions of data into trends, regime dynamics, and structural observations that don't show up in any single day.
+The weekend ritual. Goal: extract the ONE structural observation this week that compounds into next week. Not a summary — a synthesis.
 
 ## Required context
 
-Load `mes-context` first. Use `mes-brain` for queries. Use `brain-files` to check Obsidian for prior weekly notes.
+Load `mes-context` first. Account: **APEX-565990-01**. Authoritative version on PC: `python ~/mes-intel/tools/review_rotation.py` (runs an 8-week themed rotation — each week emphasizes a different angle).
 
-## Inputs to gather
+## Inputs
 
-- **Week boundaries** — default to last 5 RTH sessions ending today. Allow user to specify a different week.
-- **Comparison baseline** — default to prior 4 weeks rolling.
+Default week: the just-completed Mon-Fri. User can override with explicit dates.
 
 ## Workflow
 
-### 1. Top-line numbers per account
+### 1. Weekly top-line
 
-For each account:
+From `journal/all_trades.csv` filtered to APEX and this week:
 
 ```
-Trades: N (vs baseline avg M)
-Win rate: X% (vs Y%)
-Net P&L: $A (vs $B)
+Week of <Mon_date> – <Fri_date>
+
+Sessions: N · Trade-days: M · Zero-trade days: <list>
+Trades: N
+Win rate: X% 
+Gross: $A · Commissions: $B · Net: $C
 Profit factor: <pf>
-Max DD this week: $C
-Equity now vs week start: +/-$D
+Worst intraweek drawdown: $D (<date>)
+
+Balance: $E (start $F, change $±G)
+Distance to pass: $H remaining
 ```
 
-### 2. Regime distribution
+### 2. Daily progression
 
-Count time spent in each regime this week (use `market_regimes` time-series). Then bucket trades by regime at entry. Compute per-regime win rate and avg P&L. Render:
+One-line per session:
 
-| Regime    | Time in regime | Trades | WR  | Net  |
-|-----------|----------------|--------|-----|------|
-| trending  | 4h 12m         | 8      | 62% | +$X  |
-| ranging   | 9h 30m         | 12     | 41% | -$Y  |
-| ...       |                |        |     |      |
+```
+Mon: <grade> <score>% · N trades · $±X · <top violation>
+Tue: ...
+...
+```
 
-This is where structural insights live — "I made all my money in trending and gave it back in ranging" is a high-value finding.
+### 3. Streak progression
 
-### 3. Strategy contributions
+Read `rule_compliance.csv`. Render:
+```
+Streak entering week: N · Streak exiting week: M
+Streak changes: <continued|broken on <date>|rebuilt starting <date>>
+```
 
-Pull `strategy_weights_history` for the week's start and end. List strategies whose weight rose >20% (system is leaning into them) and those that dropped >20% (system is muting them). Cross-reference with the strategies that triggered actual trades — are you taking the ones the system likes?
+### 4. 10-rule heatmap
 
-### 4. Time-of-day breakdown
+Which rules failed MOST this week? (Aggregate across sessions.)
 
-Bucket trades by 30-minute window from the open. Win rate and avg P&L per bucket. Identify the trader's:
+```
+Most-broken rules this week:
+  R1 size_locked:   3/5 sessions
+  R3 daily_cap:     2/5 sessions
+  R5 no_revenge:    2/5 sessions
+Most-kept rules:
+  R7 loss_limit:    5/5 sessions ✓
+  R10 profit_stop:  5/5 sessions ✓
+```
 
-- **Money window** — bucket(s) with the best expectancy
-- **Drain window** — bucket(s) with negative expectancy
-- **Inactivity** — buckets with zero trades that historically had good edge
+### 5. Regime / slice distribution
 
-### 5. Behavioral patterns
+Bucket trades by:
 
-Look for:
+- **Day-of-week**: where's the money?
+- **Hour-of-day**: where's the money?
+- **Hold duration**: quick / patient / long — which slice won and lost?
+- **Contract size**: which size netted most?
+- **Session grade**: A/B vs C-or-worse contribution to week P&L
 
-- **Revenge trading** — clusters of trades within 5 min of a loss with negative outcomes.
-- **Overtrading days** — days with N >> baseline avg, broken down by outcome.
-- **Best-day breakdown** — if one day made the week, what was different about it?
-- **Worst-day breakdown** — if one day broke it, was it a process failure or a market environment issue?
+Render the table where the structural pattern is clearest (usually hold-duration or session-grade).
 
-### 6. Open questions
+### 6. Best day / worst day breakdown
 
-Surface 2-3 questions the data raises that need a human decision next week. Examples:
+Identify the week's best and worst sessions. For each, explain in 2-3 lines what was different. Common factors:
 
-- "Strategy X has been triggering more but losing. Manually review weights?"
-- "All wins came when MarketBrain said `trending`. Should we gate harder on regime confidence?"
-- "Prop firm A is 80% to profit target but on a losing streak — slow down or push through?"
+- Few trades vs many
+- Patient holds vs quick scalps
+- Clean rule compliance vs multiple violations
+- Time of first trade
 
-### 7. Suggested capture
+### 7. Commission audit
 
-End by suggesting the user run `/insight-capture` on the single most important finding from the week. Provide a draft so they can confirm or edit.
+```
+Week commissions: $X
+% of gross P&L: Y%
+If you'd cut sub-6-tick trades: additional $Z in net
+```
+
+### 8. The structural lesson
+
+ONE observation about HOW Jaime traded (not what markets did). Examples:
+
+- "The Thu/Fri pattern (not-first-trade, 9:41-11:00, held through pullback) produced 100% of this week's net profit. Mon-Wed was pattern-broken scalping."
+- "Sub-6-tick scalps made up 40% of trades but -120% of P&L contribution. Eliminating them alone adds $X to next week."
+- "Size was stable through Wed, escalated Thu/Fri — but those were the winners. Size discipline might matter less than setup discipline."
+
+Prefer observations that Jaime can act on NEXT Monday.
+
+### 9. Next week's commitment
+
+Derived from the structural lesson:
+
+- One commitment (not five)
+- Testable within a week
+- Behavioral, not strategic
+
+```
+Next week's commitment: <one sentence>
+Measurable target: <specific metric that improves>
+Ceiling check: <hard rule, e.g. "hard stop at 10 trades per session">
+```
+
+### 10. Follow-up
+
+```
+Consider:
+  - /insight-capture the structural lesson to Daily/<date>.md
+  - /accountability-post the commitment
+  - Run `python ~/mes-intel/tools/review_rotation.py` for this week's themed deep-dive
+```
 
 ## Output format
 
-Sections in order: **Headline**, **By account**, **By regime** (table), **Strategies in play**, **Time-of-day**, **Behavioral notes**, **Open questions**, **Suggested capture**.
+Top-line → daily progression → streak → rule heatmap → slice distribution → best/worst → commission → structural lesson → commitment → follow-up.
 
-Length budget: 60-90 lines of markdown. This is the meatiest skill but should still fit on 2-3 screens.
+Target length: 60-100 lines.
 
 ## Don'ts
 
-- Don't claim a behavior is a "leak" with N < 5. Patterns need a sample.
-- Don't repeat what `/grade-day` already said for each day. Aggregate, don't restate.
-- Don't add motivational summary. This is analysis, not coaching.
+- Don't generate "coaching" prose. State observations, leave the call.
+- Don't make the structural lesson a vague platitude ("be more patient"). Be specific ("entries under 6 min have negative expectancy, commit to 6-min thesis pre-click").
+- Don't recommend strategy changes — meta-learning is for the MES app's MetaLearner, not this skill.
+- Don't include PERSONAL trades.
