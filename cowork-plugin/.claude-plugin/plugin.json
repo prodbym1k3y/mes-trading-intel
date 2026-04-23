@@ -1,7 +1,7 @@
 {
   "name": "mes-trading-intel",
-  "version": "0.2.0",
-  "description": "Cowork integration for Jaime's MES / Apex-565990-01 trading system. Performance feedback and coaching — NOT signal generation. 16 skills for daily prep, pre-trade friction, post-trade grading, leak detection, streak tracking, commission audit, accountability posts, and cross-brain recall. Wired to the shared journal CSVs, brain SQLite, Obsidian vault, and Claude memory via 3 MCPs.",
+  "version": "0.2.1",
+  "description": "Cowork integration for Jaime's MES / Apex-565990-01 trading system. Performance feedback + psych-aware coaching — NOT signal generation. 17 skills for daily prep, pre-trade friction, real-time psych checks (Patient vs Triggered Jaime), post-trade grading, leak detection, streak tracking, commission audit, accountability posts, and cross-brain recall. Wired to the shared journal CSVs, brain SQLite, Obsidian vault, and Claude memory via 3 MCPs.",
   "author": {
     "name": "Jaime (m1k3y)"
   },

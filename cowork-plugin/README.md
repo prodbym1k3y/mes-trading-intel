@@ -1,6 +1,6 @@
-# mes-trading-intel (v0.2.0)
+# mes-trading-intel (v0.2.1)
 
-Cowork integration for Jaime's MES futures trading — specifically the **APEX-565990-01 50k evaluation**. Wires the shared Brain (SQLite + journal CSVs + Obsidian vault + Claude memory) into Claude Cowork with 16 skills built around the two non-negotiable rules:
+Cowork integration for Jaime's MES futures trading — specifically the **APEX-565990-01 50k evaluation**. Wires the shared Brain (SQLite + journal CSVs + Obsidian vault + Claude memory) into Claude Cowork with 17 skills built around the two non-negotiable rules:
 
 1. **Never mix PERSONAL and APEX accounts.** Every skill defaults to APEX-565990-01.
 2. **This is a feedback + coaching system, NOT signal generation.** No skill recommends entries.
@@ -15,9 +15,10 @@ The Brain is the unifying layer — Mac and PC both sync it via iCloud, the PC's
 | Slash command | When to use | PC tool equivalent |
 |---|---|---|
 | `/morning-prep` | Before the open — yesterday's grade, current edges/leaks, commitment for today | `morning.py` |
+| `/psych-check` | **Live state guard** — am I Patient or Triggered? Should I take the next trade, keep going, or stop? | — |
 | `/pre-trade-checklist` | Right before pulling the trigger — friction, refuses <6-tick edge | `pretrade.py` |
-| `/grade-trade` | Right after closing — single-trade surgical review, optional runner log | `grade_trade.py` / `apex_trade_log.py` |
-| `/grade-day` | After the close — 10-rule score, leak/edge contribution, tomorrow's commitment | `grade_session.py` + `leak_detector.py` |
+| `/grade-trade` | Right after closing — single-trade surgical review with state classification, optional runner log | `grade_trade.py` / `apex_trade_log.py` |
+| `/grade-day` | After the close — 10-rule score + session arc + Which Jaime, tomorrow's commitment | `grade_session.py` + `leak_detector.py` |
 | `/regime-check` | Postmortem only — market structure context for a specific trade | `market_context.py` + `gamma_analysis.py` |
 
 #### Account + discipline
